@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HivemindOverlay</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div id="popup-container">
+        <h1>HivemindOverlay</h1>
+        <div id="settings">
+            <h2>Settings</h2>
+            <label for="filter-toggle">Enable Filters:</label>
+            <input type="checkbox" id="filter-toggle" checked>
+            <br>
+            <label for="highlight-toggle">Highlight Useful Messages:</label>
+            <input type="checkbox" id="highlight-toggle" checked>
+            <br>
+            <label for="speech-sync-toggle">Enable Speech Sync:</label>
+            <input type="checkbox" id="speech-sync-toggle">
+        </div>
+        <div id="status">
+            <h2>Status</h2>
+            <p id="connection-status">Connecting...</p>
+        </div>
+        <button id="save-settings">Save Settings</button>
+    </div>
+    <script src="popup.js"></script>
+</body>
+</html>
