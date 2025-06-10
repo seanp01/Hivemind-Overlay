@@ -9,9 +9,7 @@
     "storage",
     "scripting",
     "webRequest",
-    "webRequestBlocking",
-    "https://*.twitch.tv/*",
-    "https://*.youtube.com/*"
+    "webRequest"
   ],
   "host_permissions": [
     "https://*.twitch.tv/*",

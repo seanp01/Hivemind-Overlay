@@ -15,24 +15,35 @@ overlayContainer.style.overflowY = 'auto';
 overlayContainer.style.width = '300px';
 overlayContainer.style.fontFamily = 'Arial, sans-serif';
 overlayContainer.style.fontSize = '14px';
+// stay scrolled to the bottom
+const scrollOverlayToBottom = () => {
+    overlayContainer.scrollTop = overlayContainer.scrollHeight;
+};
+
 import ChatClient from '../src/chatClient/index.js';
 
 document.body.appendChild(overlayContainer);
 
 const chatClient = new ChatClient('twitch'); // or 'youtube'
 chatClient.on('message', (msg) => addMessageToOverlay(msg));
-chatClient.connect();
 
 const addMessageToOverlay = (message) => {
     const messageElement = document.createElement('div');
-    messageElement.textContent = message;
+    messageElement.textContent = message.user + ": " + message.message;
     overlayContainer.appendChild(messageElement);
+    scrollOverlayToBottom();
 };
 
 // Listen for messages from the chat client (to be implemented)
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.type === 'newMessage') {
         addMessageToOverlay(request.message);
+    }
+    if (request.type === "tabUrl") {
+        // Use request.url as needed
+        console.log("Tab URL received in content script:", request.url);
+        // You can now use request.url in your content script logic
+        chatClient.connect(request.url);
     }
 });
 

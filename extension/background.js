@@ -1,8 +1,8 @@
-//import { LLMService } from '../src/llm/index.js';
+import LLMService from '../src/llm/index.js';
 
 
 // background.js
-//const llm = new LLMService();
+const llm = new LLMService();
 
 chrome.runtime.onInstalled.addListener(() => {
     console.log("HivemindOverlay extension installed.");
@@ -10,16 +10,16 @@ chrome.runtime.onInstalled.addListener(() => {
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.action === "predict") {
-        // llm.call(request.prompt)
-        //     .then(summary => sendResponse({ result: summary }))
-        //     .catch(err => sendResponse({ result: "Error: " + err.message }));
-        // return true; // Keep the message channel open for async response
+        llm.call(request.prompt)
+            .then(summary => sendResponse({ result: summary }))
+            .catch(err => sendResponse({ result: "Error: " + err.message }));
+        return true; // Keep the message channel open for async response
     }
     if (request.action === "summarizeChat") {
-        // llm.summarizeChat(request.chatBlocks)
-        //     .then(summary => sendResponse({ result: summary }))
-        //     .catch(err => sendResponse({ result: "Error: " + err.message }));
-        // return true; // Keep the message channel open for async response
+        llm.summarizeChat(request.chatBlocks)
+            .then(summary => sendResponse({ result: summary }))
+            .catch(err => sendResponse({ result: "Error: " + err.message }));
+        return true; // Keep the message channel open for async response
     }
 });
 
@@ -33,12 +33,14 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
     ) {
         chrome.scripting.executeScript({
             target: { tabId },
-            files: ['content.js']
+            files: ['content.bundle.js']
         }, () => {
             if (chrome.runtime.lastError) {
                 console.error(chrome.runtime.lastError.message);
             } else {
-                console.log('content.js injected');
+                console.log('content.bundle.js injected');
+                // Send the URL to the content script
+                chrome.tabs.sendMessage(tabId, { type: "tabUrl", url: tab.url });
             }
         });
     }
