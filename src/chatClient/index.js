@@ -1,4 +1,7 @@
 import tmi from 'tmi.js'; // Import tmi.js for Twitch chat handling
+import LLMService from '../llm/index.js';
+
+const llm = new LLMService();
 
 class ChatClient {
     constructor(platform) {
@@ -27,27 +30,27 @@ class ChatClient {
         // Dynamically import tmi.js if not already imported
         try {
             this.twitchClient = new tmi.Client({
-            channels: [channel]
+                channels: [channel]
             });
 
             this.twitchClient.connect();
 
             this.twitchClient.on('message', (channel, tags, message, self) => {
-            if (self) return; // Ignore echoed messages
-            this.handleMessage({
-                user: tags['display-name'] || tags.username,
-                message,
-                platform: 'twitch',
-                tags
-            });
+                if (self) return; // Ignore echoed messages
+                this.handleMessage({
+                    user: tags['display-name'] || tags.username,
+                    message,
+                    platform: 'twitch',
+                    tags
+                });
             });
 
             this.twitchClient.on('connected', () => {
-            this.emit('connected', { platform: 'twitch', channel });
+                this.emit('connected', { platform: 'twitch', channel });
             });
 
             this.twitchClient.on('disconnected', (reason) => {
-            this.emit('disconnected', { platform: 'twitch', reason });
+                this.emit('disconnected', { platform: 'twitch', reason });
             });
         } catch (err) {
             this.emit('error', { platform: 'twitch', error: err });
@@ -72,8 +75,11 @@ class ChatClient {
         }
     }
 
-    handleMessage(message) {
+    async handleMessage(message) {
         this.chatMessages.push(message);
+        // get a prediction
+        const predictions = await llm.callPredict(message.message);
+        message.predictions = predictions; // Attach sentiment analysis result to the message
         this.emit('message', message);
     }
 

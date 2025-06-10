@@ -1,4 +1,6 @@
 const path = require('path');
+const webpack = require('webpack');
+
 module.exports = {
   mode: 'development',
   entry: {
@@ -30,5 +32,11 @@ module.exports = {
   resolve: {
     extensions: ['.json', '.js', '.jsx']
   },
-  devtool: 'source-map'
+  devtool: 'source-map',
+  plugins: [
+    new webpack.DefinePlugin({
+      'process.env.LMPORT': JSON.stringify(process.env.LMPORT || 5222)
+    })
+  ],
+  
 };

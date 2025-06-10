@@ -2996,8 +2996,10 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export */ });
 /* harmony import */ var tmi_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! tmi.js */ "./node_modules/tmi.js/index.js");
 /* harmony import */ var tmi_js__WEBPACK_IMPORTED_MODULE_0___default = /*#__PURE__*/__webpack_require__.n(tmi_js__WEBPACK_IMPORTED_MODULE_0__);
+/* harmony import */ var _llm_index_js__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! ../llm/index.js */ "./src/llm/index.js");
  // Import tmi.js for Twitch chat handling
 
+const llm = new _llm_index_js__WEBPACK_IMPORTED_MODULE_1__["default"]();
 class ChatClient {
   constructor(platform) {
     this.platform = platform; // 'twitch' or 'youtube'
@@ -3069,14 +3071,138 @@ class ChatClient {
       this.eventListeners[event].forEach(listener => listener(data));
     }
   }
-  handleMessage(message) {
+  async handleMessage(message) {
     this.chatMessages.push(message);
+    // get a prediction
+    const predictions = await llm.callPredict(message.message);
+    message.predictions = predictions; // Attach sentiment analysis result to the message
     this.emit('message', message);
   }
 
   // Additional methods for handling chat messages, filtering, etc.
 }
 /* harmony default export */ const __WEBPACK_DEFAULT_EXPORT__ = (ChatClient);
+
+/***/ }),
+
+/***/ "./src/llm/index.js":
+/*!**************************!*\
+  !*** ./src/llm/index.js ***!
+  \**************************/
+/***/ ((__unused_webpack_module, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   "default": () => (__WEBPACK_DEFAULT_EXPORT__)
+/* harmony export */ });
+// webpack handles this with .env
+const LMPORT = 5222 || 0;
+const sentiment_to_label = {
+  // 🟢 Tone-based sentiments
+  "neutral": 0,
+  // No strong sentiment
+  "positive": 1,
+  // Kind, optimistic, supportive
+  "negative": 2,
+  // Disapproving, pessimistic
+  "toxic": 3,
+  // Aggressive, rude, inflammatory
+  "confused": 4,
+  // Expresses confusion or lack of understanding
+  "angry": 5,
+  // Expresses frustration or anger
+  "sad": 6,
+  // Expresses disappointment, loss, or empathy
+  "hype": 7,
+  // Excited cheering or support (e.g. "LETS GOOO")
+
+  // 🎭 Expression style / delivery
+  "sarcastic": 8,
+  // Ironic, saying the opposite of what's meant
+  "joke": 9,
+  // Light-hearted humor, not mocking
+  "copypasta": 10,
+  // Repeated or meme block text
+  "emote_spam": 11,
+  // Emote-only or excessive emotes
+  "bait": 12,
+  // Provocative to stir a reaction
+  "mocking": 13,
+  // Ridiculing someone/something
+  "cringe": 14,
+  // Social embarrassment, second-hand shame
+
+  // ❓ Intent or purpose of message
+  "question": 15,
+  // Seeking info, asking streamer or chat
+  "command_request": 16,
+  // Suggesting actions ("play X", "go here")
+  "insightful": 17,
+  // Adds valuable knowledge or perspective
+  "meta": 18,
+  // Commentary about chat or the stream itself
+  "criticism": 19,
+  // Disapproval or critique, non-toxic
+
+  // 🧩 Add-on specialized classes
+  "backseat": 20,
+  // Telling the streamer how to play
+  "fan_theory": 21,
+  // Lore speculation or plot guessing
+  "supportive": 22,
+  // Deeply affirming, emotionally positive
+  "personal_story": 23,
+  // Sharing personal anecdotes to relate
+  "reaction_gif_text": 24 // Expressive reactions ("*grabs popcorn*", "sheesh")
+};
+class LLMService {
+  constructor(apiUrl) {
+    // Use provided apiUrl or default to localhost with LMPORT
+    this.apiUrl = apiUrl || new URL(`/predict`, `http://localhost:${LMPORT}`).toString();
+  }
+  async summarizeChat(chatBlocks) {
+    // Step 1: Get a summary for each chat block
+    const summaries = await Promise.all(chatBlocks.map(block => this.callPredict(block)));
+
+    // Step 2: Optionally, combine summaries and get a final summary
+    const combinedSummary = summaries.join('\n');
+    const finalSummary = await this.callPredict(`Summarize the following chat summaries:\n${combinedSummary}`);
+    return finalSummary;
+  }
+  createPrompt(chatBlocks) {
+    return `Summarize the following chat messages:\n${chatBlocks.join('\n')}`;
+  }
+
+  // Send a prompt to the local LLM server's /predict endpoint
+  async callPredict(chatMessages) {
+    const response = await fetch(this.apiUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        chat_messages: chatMessages
+      })
+    });
+    if (!response.ok) {
+      throw new Error('Failed to fetch prediction from LLM API');
+    }
+    const data = await response.json();
+    // Reverse the sentiment_to_label mapping for label lookup
+    const labelToSentiment = Object.entries(sentiment_to_label).reduce((acc, [sentiment, idx]) => {
+      acc[`LABEL_${idx}`] = sentiment;
+      return acc;
+    }, {});
+
+    // Map predictions to readable sentiment labels
+    return (data.prediction || []).map(pred => ({
+      sentiment: labelToSentiment[pred.label] || pred.label,
+      score: pred.score
+    }));
+  }
+}
+/* harmony default export */ const __WEBPACK_DEFAULT_EXPORT__ = (LLMService);
 
 /***/ }),
 
@@ -3203,7 +3329,7 @@ overlayContainer.style.borderRadius = '5px';
 overlayContainer.style.zIndex = '9999';
 overlayContainer.style.maxHeight = '300px';
 overlayContainer.style.overflowY = 'auto';
-overlayContainer.style.width = '300px';
+overlayContainer.style.width = '600px';
 overlayContainer.style.fontFamily = 'Arial, sans-serif';
 overlayContainer.style.fontSize = '14px';
 // stay scrolled to the bottom
@@ -3213,10 +3339,70 @@ const scrollOverlayToBottom = () => {
 
 document.body.appendChild(overlayContainer);
 const chatClient = new _src_chatClient_index_js__WEBPACK_IMPORTED_MODULE_0__["default"]('twitch'); // or 'youtube'
-chatClient.on('message', msg => addMessageToOverlay(msg));
+chatClient.on('message', msg => {
+  addMessageToOverlay(msg);
+});
 const addMessageToOverlay = message => {
   const messageElement = document.createElement('div');
-  messageElement.textContent = message.user + ": " + message.message;
+
+  // Alternate user colors
+  const userColors = ['#4FC3F7', '#FFB74D', '#81C784', '#BA68C8', '#FFD54F', '#E57373', '#64B5F6', '#A1887F', '#90A4AE', '#F06292', '#AED581', '#FFF176', '#9575CD', '#4DB6AC', '#FF8A65', '#DCE775', '#7986CB', '#B0BEC5', '#F44336', '#00BCD4'];
+  if (!addMessageToOverlay.userColorMap) addMessageToOverlay.userColorMap = {};
+  let userColor = userColors[0];
+  if (message.user) {
+    if (!addMessageToOverlay.userColorMap[message.user]) {
+      const idx = Object.keys(addMessageToOverlay.userColorMap).length % userColors.length;
+      addMessageToOverlay.userColorMap[message.user] = userColors[idx];
+    }
+    userColor = addMessageToOverlay.userColorMap[message.user];
+  }
+
+  // User styling
+  const userSpan = document.createElement('span');
+  userSpan.textContent = message.user + ": ";
+  userSpan.style.fontWeight = 'bold';
+  userSpan.style.color = userColor;
+
+  // Message text
+  const textSpan = document.createElement('span');
+  textSpan.textContent = message.message + " ";
+
+  // Sentiment badge colors
+  const sentimentColors = {
+    positive: '#4CAF50',
+    negative: '#F44336',
+    neutral: '#FFC107',
+    mixed: '#2196F3',
+    happy: '#81C784',
+    sad: '#90A4AE',
+    angry: '#E57373',
+    surprised: '#FFD54F',
+    fear: '#9575CD',
+    // fallback
+    default: '#B0BEC5'
+  };
+  messageElement.appendChild(userSpan);
+  messageElement.appendChild(textSpan);
+
+  // Sentiment badges
+  if (Array.isArray(message.predictions) && message.predictions.length > 0) {
+    message.predictions.slice(0, 3).forEach(sentiment => {
+      const badge = document.createElement('span');
+      badge.textContent = sentiment.sentiment;
+      badge.style.display = 'inline-block';
+      badge.style.padding = '2px 8px';
+      badge.style.marginLeft = '8px';
+      badge.style.marginRight = '2px';
+      badge.style.borderRadius = '12px';
+      badge.style.fontSize = '12px';
+      badge.style.fontWeight = 'bold';
+      badge.style.backgroundColor = sentimentColors[sentiment.sentiment] || sentimentColors.default;
+      badge.style.color = '#222';
+      badge.style.border = '1px solid #fff2';
+      badge.style.verticalAlign = 'middle';
+      messageElement.appendChild(badge);
+    });
+  }
   overlayContainer.appendChild(messageElement);
   scrollOverlayToBottom();
 };

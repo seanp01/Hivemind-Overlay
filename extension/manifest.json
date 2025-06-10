@@ -13,7 +13,8 @@
   ],
   "host_permissions": [
     "https://*.twitch.tv/*",
-    "https://*.youtube.com/*"
+    "https://*.youtube.com/*",
+    "http://localhost:5222/*"
   ],
   "background": {
     "service_worker": "background.bundle.js"

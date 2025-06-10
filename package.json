@@ -17,6 +17,7 @@
   },
   "homepage": "https://github.com/seanp01/Hivemind-Overlay#readme",
   "dependencies": {
+    "crypto-browserify": "^3.12.1",
     "tmi": "^2.0.0",
     "tmi.js": "^1.8.5"
   },
@@ -24,10 +25,13 @@
     "@babel/core": "^7.27.4",
     "@babel/preset-env": "^7.27.2",
     "babel-loader": "^10.0.0",
-    "webpack-cli": "^6.0.1"
-  },  
-  "version": "1.2.0",
+    "dotenv-webpack": "^8.1.0",
+    "webpack": "^5.99.9",
+    "webpack-cli": "^4.10.0"
+  },
+  "version": "1.3.0",
   "changelog": {
+    "1.3.0": "First working version of the overlay that outputs predictions from the LM service by tagging sentiments to messages in chat. ~ Sean Parker",
     "1.2.0": "Changes to begin emitting chat messages from the chatClient using tmi.js. The overlay presently mimics chat text in a sub-window overlay. ~ Sean Parker",
     "1.1.0": "Implemented webpack and built a webpack.config.js. Also implemented node and added a package.json. ~ Sean Parker",
     "1.0.0": "Initial solution commit. Icons and scaffolding. ~ Sean Parker"
