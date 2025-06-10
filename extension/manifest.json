@@ -5,6 +5,7 @@
   "description": "A Chrome extension that enhances Twitch and YouTube live chats by filtering junk, highlighting useful content, and analyzing live speech audio.",
   "permissions": [
     "activeTab",
+    "tabs",
     "storage",
     "scripting",
     "webRequest",
@@ -12,8 +13,12 @@
     "https://*.twitch.tv/*",
     "https://*.youtube.com/*"
   ],
+  "host_permissions": [
+    "https://*.twitch.tv/*",
+    "https://*.youtube.com/*"
+  ],
   "background": {
-    "service_worker": "background.js"
+    "service_worker": "background.bundle.js"
   },
   "action": {
     "default_popup": "popup.html",
@@ -29,13 +34,13 @@
         "https://*.twitch.tv/*",
         "https://*.youtube.com/*"
       ],
-      "js": ["content.js"],
+      "js": ["content.bundle.js"],
       "run_at": "document_end"
     }
   ],
   "web_accessible_resources": [
     {
-      "resources": ["styles.css"],
+      "resources": ["styles.css", "content.js"],
       "matches": ["<all_urls>"]
     }
   ],
