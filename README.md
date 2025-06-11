@@ -84,5 +84,7 @@ This is a WIP. All files currently contain **placeholders** with `// TODO` instr
 
 ---
 
+https://github.com/user-attachments/assets/b2557c20-bf28-4313-8cb8-90cf6511894a
+
 > Inspired by how drone bugs monitor and respond to collective behavior.  
 > Designed for streamers who want **signal**—not **noise**.
