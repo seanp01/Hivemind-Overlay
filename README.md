@@ -1,8 +1,8 @@
-# HivemindOverlay
+# Hivemind Overlay
 ![icon-256](https://github.com/user-attachments/assets/aebeb907-806c-4047-9235-f87c1950651d)
 
 
-**HivemindOverlay** is a Chrome extension and optional server-side assistant that enhances Twitch and YouTube livestream chat by:
+**Hivemind Overlay** is a Chrome extension and optional server-side assistant that enhances Twitch and YouTube livestream chat by:
 
 - Filtering junk
  and spam in real time  
