@@ -1,8 +1,10 @@
 # HivemindOverlay
+![icon-1024](https://github.com/user-attachments/assets/08496d5c-2eda-4be1-bfa7-c0a364225d31)
 
 **HivemindOverlay** is a Chrome extension and optional server-side assistant that enhances Twitch and YouTube livestream chat by:
 
-- Filtering junk and spam in real time  
+- Filtering junk
+ and spam in real time  
 - Highlighting meaningful messages (questions, jokes, tips)  
 - Using AI (LLMs like GPT or Claude) to summarize and analyze chat blocks  
 - (Optionally) Listening to streamer voice via Web Speech API or Whisper  
