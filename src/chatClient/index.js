@@ -9,6 +9,9 @@ class ChatClient {
         this.chatMessages = [];
         this.eventListeners = {};
         this.twitchClient = null; // Will hold the tmi.js client instance
+        this.messageFrequency = {}; // Tracks message frequencies
+        this.predictionCache = {}; // Caches predictions for frequent messages
+        this.frequencyThreshold = 3; // Set your desired threshold here
     }
 
     connect(url) {
@@ -77,9 +80,26 @@ class ChatClient {
 
     async handleMessage(message) {
         this.chatMessages.push(message);
-        // get a prediction
-        const predictions = await llm.callPredict(message.message);
-        message.predictions = predictions; // Attach sentiment analysis result to the message
+
+        // Track message frequency
+        const msgText = message.message;
+        this.messageFrequency[msgText] = (this.messageFrequency[msgText] || 0) + 1;
+
+        // If message is frequent enough, cache its prediction
+        if (
+            this.messageFrequency[msgText] >= this.frequencyThreshold &&
+            !this.predictionCache[msgText]
+        ) {
+            const predictions = await llm.callPredict(msgText);
+            this.predictionCache[msgText] = predictions;
+            message.predictions = predictions;
+        } else if (this.predictionCache[msgText]) {
+            message.predictions = this.predictionCache[msgText];
+        } else {
+            // Not frequent, get prediction as usual (not cached)
+            message.predictions = await llm.callPredict(msgText);
+        }
+
         this.emit('message', message);
     }
 
