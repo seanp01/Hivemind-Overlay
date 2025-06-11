@@ -1,4 +1,4 @@
-# HivemindOverlay
+# Hivemind Overlay
 ![icon-256](https://github.com/user-attachments/assets/aebeb907-806c-4047-9235-f87c1950651d)
 
 
