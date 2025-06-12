@@ -12,7 +12,7 @@ buttonBar.style.display = 'flex';
 buttonBar.style.justifyContent = 'flex-end';
 buttonBar.style.alignItems = 'center';
 buttonBar.style.gap = '8px';
-buttonBar.style.background = 'rgba(30,30,30,0.95)';
+buttonBar.style.background = 'rgba(173, 169, 169, 0.57)';
 buttonBar.style.zIndex = '10001';
 buttonBar.style.padding = '4px 0 4px 0';
 buttonBar.style.boxShadow = '0 2px 8px #0002';
@@ -29,6 +29,10 @@ popoutButton.style.height = '28px';
 popoutButton.style.fontSize = '16px';
 popoutButton.style.cursor = 'pointer';
 popoutButton.style.boxShadow = '0 1px 4px #0004';
+popoutButton.style.display = 'flex';
+popoutButton.style.alignItems = 'center';
+popoutButton.style.justifyContent = 'center';
+popoutButton.style.textAlign = 'center';
 
 const minimizeButton = document.createElement('button');
 minimizeButton.textContent = '−';
@@ -45,6 +49,9 @@ minimizeButton.style.height = '28px';
 minimizeButton.style.fontSize = '18px';
 minimizeButton.style.cursor = 'pointer';
 minimizeButton.style.boxShadow = '0 1px 4px #0004';
+minimizeButton.style.display = 'flex';
+minimizeButton.style.alignItems = 'center';
+minimizeButton.style.justifyContent = 'center';
 
 const expandButton = document.createElement('button');
 expandButton.textContent = '+';
@@ -62,15 +69,68 @@ expandButton.style.fontSize = '20px';
 expandButton.style.cursor = 'pointer';
 expandButton.style.boxShadow = '0 1px 4px #0004';
 expandButton.style.display = 'none';
+expandButton.style.display = 'flex';
+expandButton.style.alignItems = 'center';
+expandButton.style.justifyContent = 'center';
+expandButton.style.textAlign = 'center';
+
+const timeFrames = [
+    { label: '10s', value: 10 },
+    { label: '30s', value: 30 },
+    { label: '1m', value: 60 },
+    { label: '5m', value: 300 },
+    { label: '10m', value: 600 },
+    { label: '30m', value: 1800 },
+    { label: '1h', value: 3600 },
+    { label: '2h', value: 7200 },
+    { label: '6h', value: 21600 },
+    { label: '12h', value: 43200 },
+    { label: '24h', value: 86400 }
+];
+
+const timeFrameRadios = document.createElement('div');
+timeFrameRadios.style.display = 'flex';
+timeFrameRadios.style.alignItems = 'center';
+timeFrameRadios.style.gap = '8px';
+timeFrameRadios.style.marginRight = 'auto'; // push to left
+
+let selectedTimeFrame = 60; // default 1m
+
+timeFrames.forEach(tf => {
+    const label = document.createElement('label');
+    label.style.display = 'flex';
+    label.style.alignItems = 'center';
+    label.style.gap = '2px';
+
+    const radio = document.createElement('input');
+    radio.type = 'radio';
+    radio.name = 'pie-timeframe';
+    radio.value = tf.value;
+    if (tf.value === selectedTimeFrame) radio.checked = true;
+
+    radio.addEventListener('change', () => {
+        selectedTimeFrame = parseInt(radio.value, 10);
+        updatePieChartForWindow();
+    });
+
+    label.appendChild(radio);
+    label.appendChild(document.createTextNode(tf.label));
+    timeFrameRadios.appendChild(label);
+});
+
+buttonBar.insertBefore(timeFrameRadios, buttonBar.firstChild);
 
 document.body.appendChild(expandButton);
 
+// Ensure expandButton is always on top of everything
+expandButton.style.position = 'fixed';
+expandButton.style.top = '10px';
+expandButton.style.right = '10px';
+expandButton.style.zIndex = '10002';
+expandButton.style.display = 'none';
 // Move button creation here so they're not appended directly to overlayContainer
 buttonBar.appendChild(popoutButton);
 buttonBar.appendChild(minimizeButton);
-
-// Ensure expandButton is always on top of everything
-expandButton.style.zIndex = '10002';
 // This file injects overlay/UI elements into Twitch and YouTube pages, allowing real-time monitoring and interaction with live chats.
 // Only create the overlay if it doesn't already exist
 let overlayContainer = document.getElementById('hivemind-overlay');
@@ -111,9 +171,7 @@ sentimentSummaryContainer.style.gap = '24px';
 const movementArrowList = document.createElement('ol');
 movementArrowList.id = 'sentiment-ranking';
 movementArrowList.style.margin = '0';
-movementArrowList.style.padding = '0 0 0 20px';
 movementArrowList.style.listStyle = 'decimal';
-sentimentSummaryContainer.appendChild(movementArrowList);
 // Ensure sentimentSummaryContainer is always inside overlayContainer
 
 popoutButton.addEventListener('click', () => {
@@ -153,6 +211,59 @@ expandButton.addEventListener('click', () => {
     expandButton.style.display = 'none';
 });
 overlayContainer.appendChild(sentimentSummaryContainer);
+// --- Chat Volume Slider & Bar Chart ---
+
+// Container for slider and bar chart
+const sliderBarContainer = document.createElement('div');
+sliderBarContainer.style.display = 'flex';
+sliderBarContainer.style.flexDirection = 'column';
+sliderBarContainer.style.alignItems = 'stretch';
+sliderBarContainer.style.gap = '4px';
+sliderBarContainer.style.marginBottom = '16px';
+
+// Vertical slider
+const timeSlider = document.createElement('input');
+timeSlider.type = 'range';
+timeSlider.min = 0;
+timeSlider.max = 99;
+timeSlider.value = 99;
+timeSlider.step = 1;
+timeSlider.style.width = '100%';   // Make it as wide as the bar chart
+timeSlider.style.height = '16px';  // Typical slider height
+timeSlider.style.margin = '8px 0';
+
+// Vertical bar chart container
+const barChartContainer = document.createElement('div');
+barChartContainer.style.display = 'flex';
+barChartContainer.style.flexDirection = 'row';
+barChartContainer.style.alignItems = 'flex-end';
+barChartContainer.style.height = '60px'; // Height of the bars
+barChartContainer.style.width = '100%';  // Full width
+barChartContainer.style.justifyContent = 'flex-start';
+barChartContainer.style.gap = '1px';
+
+// Add slider and bar chart to the container
+sliderBarContainer.appendChild(barChartContainer);
+sliderBarContainer.appendChild(timeSlider);
+// Insert the sliderBarContainer into your overlay (e.g., after sentimentSummaryContainer)
+overlayContainer.appendChild(sliderBarContainer);
+
+const chatBuffer = [];
+const MAX_BUFFER_SECONDS = 600; // 10 minutes
+
+function bufferMessage(message) {
+    chatBuffer.push({ ...message, ts: Date.now() });
+    // Remove old messages
+    const cutoff = Date.now() - MAX_BUFFER_SECONDS * 1000;
+    while (chatBuffer.length && chatBuffer[0].ts < cutoff) {
+        chatBuffer.shift();
+    }
+}
+
+timeSlider.addEventListener('input', () => {
+    // You can use timeSlider.value to select a time window
+    // Optionally update other UI elements here
+});
 
 // --- Chart.js Pie Chart Setup (make sure Chart.js is loaded in your extension) ---
 let pieChart;
@@ -207,7 +318,7 @@ function updatePieChart(sentimentCounts) {
             options: {
                 responsive: false, 
                 maintainAspectRatio: false,
-                plugins: { legend: { display: true, position: 'left', padding: '0 20px 0 0' } }
+                plugins: { legend: { display: true, position: 'right' } }
             }
         });
     } else {
@@ -216,6 +327,24 @@ function updatePieChart(sentimentCounts) {
         pieChart.data.datasets[0].data = data;
         pieChart.update();
     }
+}
+
+function updatePieChartForWindow() {
+    const now = Date.now();
+    const cutoff = now - selectedTimeFrame * 1000;
+    const windowMessages = chatBuffer.filter(msg => msg.ts >= cutoff);
+
+    // Aggregate sentiment counts in the window
+    const windowSentimentCounts = {};
+    windowMessages.forEach(msg => {
+        if (Array.isArray(msg.predictions)) {
+            msg.predictions.forEach(pred => {
+                windowSentimentCounts[pred.sentiment] = (windowSentimentCounts[pred.sentiment] || 0) + 1;
+            });
+        }
+    });
+
+    updatePieChart(windowSentimentCounts);
 }
 
 // --- Ranking List with Up/Down Arrows ---
@@ -276,30 +405,30 @@ function aggregateSentiment(message) {
             sentimentCounts[pred.sentiment] = (sentimentCounts[pred.sentiment] || 0) + 1;
         });
         // Update UI
-        updatePieChart(sentimentCounts);
-        // Sort and update ranking
+        updatePieChartForWindow();        // Sort and update ranking
         const sorted = Object.entries(sentimentCounts)
             .map(([sentiment, count]) => ({ sentiment, count }))
             .sort((a, b) => b.count - a.count);
-        updateRankingList(sorted);
+        //updateRankingList(sorted);
     }
 }
 
 // Pie chart canvas
 const pieCanvas = document.createElement('canvas');
 pieCanvas.id = 'sentiment-pie';
-pieCanvas.style.width = '500px';
-pieCanvas.style.height = '500px';
-pieCanvas.width = 500;
-pieCanvas.height = 500;
-pieCanvas.setAttribute('style', 'width:500px !important;height:500px !important;display:block;');
+pieCanvas.style.width = '600px';
+pieCanvas.style.height = '400px';
+pieCanvas.width = 600;
+pieCanvas.height = 400;
+pieCanvas.setAttribute('style', 'width:600px;height:400px !important;display:block;');
 const pieWrapper = document.createElement('div');
-pieWrapper.style.width = '500px';
-pieWrapper.style.height = '500px';
+pieWrapper.style.width = '600px';
+pieWrapper.style.height = '400px';
 pieWrapper.style.overflow = 'hidden';
 pieWrapper.appendChild(pieCanvas);
 sentimentSummaryContainer.style.alignItems = 'center'; // helps vertically align
 sentimentSummaryContainer.appendChild(pieWrapper);
+sentimentSummaryContainer.appendChild(movementArrowList);
 
 // stay scrolled to the bottom
 const scrollOverlayToBottom = () => {
@@ -425,7 +554,50 @@ const addMessageToOverlay = (message) => {
     overlayContainer.insertBefore(messageElement, sentimentSummaryContainer);
     scrollOverlayToBottom();
     aggregateSentiment(message);
+    bufferMessage(message);
+    updateBarChart();
+    updatePieChartForWindow();
 };
+
+function updateBarChart() {
+    const timespan = selectedTimeFrame;
+    const bucketCount = 40;
+    const bucketSize = timespan / bucketCount;
+    const now = Date.now();
+
+    // 1. Build buckets for the selected window (to display)
+    const windowBuckets = Array(bucketCount).fill(0);
+    chatBuffer.forEach(msg => {
+        const ageSec = (now - msg.ts) / 1000;
+        if (ageSec <= timespan) {
+            const bucketIdx = Math.floor((timespan - ageSec) / bucketSize);
+            if (bucketIdx >= 0 && bucketIdx < bucketCount) {
+                windowBuckets[bucketIdx]++;
+            }
+        }
+    });
+
+    // 2. Find the window max for scaling
+    const windowMax = Math.max(...windowBuckets, 1);
+
+    // 3. Draw bars, scaling to the window max
+    barChartContainer.innerHTML = '';
+    for (let i = 0; i < bucketCount; i++) {
+        const bar = document.createElement('div');
+        bar.style.width = `${100 / bucketCount}%`;
+        bar.style.background = windowBuckets[i] > 0 ? '#4FC3F7' : '#263238';
+        bar.style.display = 'inline-block';
+        bar.style.verticalAlign = 'bottom';
+        bar.style.margin = '0 0.5px';
+        bar.style.height = `${(windowBuckets[i] / windowMax) * 100}%`;
+        barChartContainer.appendChild(bar);
+    }
+}
+
+// Update bar chart when time frame changes
+timeFrameRadios.querySelectorAll('input[type=radio]').forEach(radio => {
+    radio.addEventListener('change', updateBarChart);
+});
 
 // Listen for messages from the chat client (to be implemented)
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
