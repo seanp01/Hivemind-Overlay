@@ -30,8 +30,9 @@
     "webpack": "^5.99.9",
     "webpack-cli": "^4.10.0"
   },
-  "version": "1.9.0",
+  "version": "1.10.0",
   "changelog": {
+    "1.10.0": "Implemented a line of emojis to indicate sentiment shifts during peak chat message volumes. ~ Sean Parker",
     "1.9.0": "Updated the legend for the pie chart. Toggling legend data now filters chat as well. ~ Sean Parker",
     "1.8.0": "Small visual adjustment to the timeline, slider, and bar chart. ~ Sean Parker",
     "1.7.0": "Small change to the timeline to update timestamp as real time progresses. ~ Sean Parker",

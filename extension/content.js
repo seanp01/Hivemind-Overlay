@@ -1,5 +1,38 @@
 import Chart from 'chart.js/auto';
 // Sentiment color palette: unique, visually distinct colors for each sentiment
+export const sentimentEmojis = {
+    'positive': '😊',      // #43A047 green
+    'negative': '😠',      // #E53935 red
+    'neutral': '😐',       // #90A4AE gray-blue
+    'mixed': '🤔',         // #1E88E5 blue
+    'happy': '😄',         // #FFD600 bright yellow
+    'sad': '😢',           // #5E35B1 purple
+    'angry': '😡',         // #F4511E orange-red
+    'surprised': '😲',     // #00B8D4 cyan
+    'fear': '😱',          // #8D6E63 brown
+    'sarcastic': '🙃',     // #FFB300 amber
+    'hype': '🚀',          // #00E676 neon green
+    'cringe': '😬',        // #D81B60 magenta
+    'joke': '😂',          // #FDD835 gold
+    'mocking': '😏',       // #6D4C41 dark brown
+    'toxic': '☠️',         // #212121 black
+    'confused': '😕',      // #7E57C2 lavender
+    'copypasta': '📋',     // #FF7043 coral
+    'emote_spam': '💬',    // #29B6F6 sky blue
+    'bait': '🎣',          // #FF8A65 peach
+    'question': '❓',       // #3949AB indigo
+    'command_request': '📝',// #C0CA33 lime
+    'insightful': '💡',    // #00ACC1 teal
+    'meta': '🧠',          // #B2FF59 light green
+    'criticism': '🧐',     // #C62828 dark red
+    'backseat': '🪑',      // #F9A825 yellow-orange
+    'fan_theory': '🧩',    // #8E24AA deep purple
+    'supportive': '🤗',    // #388E3C forest green
+    'personal_story': '📖',// #A1887F taupe
+    'reaction_gif_text': '🎞️', // #F06292 pink
+    'default': '💬'
+};
+
 export const sentimentColorPalette = {
     positive:    '#43A047', // green
     negative:    '#E53935', // red
@@ -272,6 +305,9 @@ timeSlider.style.height = '12px';  // Typical slider height
 timeSlider.style.margin = '8px auto';
 timeSlider.style.display = 'block';
 timeSlider.style.backgroundColor = 'grey';
+timeSlider.style.cursor = 'pointer';
+// Make the slider thumb/button grey
+timeSlider.style.setProperty('accent-color', 'grey');
 
 // Vertical bar chart container
 const barChartContainer = document.createElement('div');
@@ -283,6 +319,16 @@ barChartContainer.style.width = '88%';
 barChartContainer.style.justifyContent = 'flex-start';
 barChartContainer.style.gap = '1px';
 barChartContainer.style.margin = '0 auto';
+
+const barChartEmojiRow = document.createElement('div');
+barChartEmojiRow.style.display = 'flex';
+barChartEmojiRow.style.flexDirection = 'row';
+barChartEmojiRow.style.alignItems = 'flex-start';
+barChartEmojiRow.style.height = '20px'; // Height for emoji row
+barChartEmojiRow.style.width = '86%';
+barChartEmojiRow.style.margin = '0 auto';
+barChartEmojiRow.style.justifyContent = 'flex-start';
+barChartEmojiRow.style.gap = '1px';
 
 // Create a container for the timestamps
 const sliderTicksContainer = document.createElement('div');
@@ -297,6 +343,7 @@ sliderTicksContainer.style.marginRight = 'auto';
 
 // Add slider and bar chart to the container
 sliderBarContainer.appendChild(barChartContainer);
+sliderBarContainer.appendChild(barChartEmojiRow);
 sliderBarContainer.appendChild(timeSlider);
 sliderBarContainer.appendChild(sliderTicksContainer);
 
@@ -808,23 +855,31 @@ function updateBarChart() {
 
     // 1. Build buckets for the selected window (to display)
     const windowBuckets = Array(bucketCount).fill(0);
+    const bucketMessages = Array(bucketCount).fill().map(() => []);
     chatBuffer.forEach(msg => {
         const ageSec = (now - msg.ts) / 1000;
         if (ageSec <= timespan) {
             const bucketIdx = Math.floor((timespan - ageSec) / bucketSize);
             if (bucketIdx >= 0 && bucketIdx < bucketCount) {
                 windowBuckets[bucketIdx]++;
+                bucketMessages[bucketIdx].push(msg);
             }
         }
     });
 
     // 2. Find the window max for scaling
     const windowMax = Math.max(...windowBuckets, 1);
-    // Ensure bar chart container has a fixed height to prevent UI jitter
-    barChartContainer.style.height = '60px'; // Set your desired fixed height here
-    // 3. Draw bars, scaling to the window max
+
+    // 3. Detect more extreme peaks (e.g., > mean + 3*stddev)
+    const mean = windowBuckets.reduce((a, b) => a + b, 0) / bucketCount;
+    const stddev = Math.sqrt(windowBuckets.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / bucketCount);
+    const peakThreshold = mean + 2.5 * stddev;
+
+    // 4. Draw bars, scaling to the window max
     barChartContainer.innerHTML = '';
+    barChartEmojiRow.innerHTML = '';
     for (let i = 0; i < bucketCount; i++) {
+        // --- Bar ---
         const bar = document.createElement('div');
         bar.style.width = `${100 / bucketCount}%`;
         bar.style.background = windowBuckets[i] > 0 ? '#4FC3F7' : '#263238';
@@ -832,7 +887,73 @@ function updateBarChart() {
         bar.style.verticalAlign = 'bottom';
         bar.style.margin = '0 0.5px';
         bar.style.height = `${(windowBuckets[i] / windowMax) * 100}%`;
+        bar.style.transition = 'background 0.15s';
+        bar.title = `${windowBuckets[i]} Chats`;
+
+        const emojiSpan = document.createElement('span');
+        emojiSpan.style.display = 'inline-block';
+        emojiSpan.style.width = `${100 / bucketCount}%`;
+        emojiSpan.style.textAlign = 'center';
+        emojiSpan.style.fontSize = '18px';
+        emojiSpan.style.userSelect = 'none';
+        emojiSpan.style.pointerEvents = 'none';
+
+        bar.addEventListener('mouseenter', () => {
+            if (windowBuckets[i] > 0) {
+                bar.style.background = '#039BE5';
+            }
+        });
+        bar.addEventListener('mouseleave', () => {
+            bar.style.background = windowBuckets[i] > 0 ? '#4FC3F7' : '#263238';
+        });
+
         barChartContainer.appendChild(bar);
+
+        // --- Emoji Row ---
+        // Sub Only Mode Toggle Emoji (show only the first lock and first unlock)
+        if (bucketMessages[i].length > 0) {
+            // Find first message where subOnlyMode === true (lock) and first where === false (unlock)
+            const firstLockMsg = bucketMessages[i].find(msg => msg.subOnlyMode === true);
+            const firstUnlockMsg = bucketMessages[i].find(msg => msg.subOnlyMode === false);
+
+            // Only show the first lock or unlock in the entire chart (not per bucket)
+            // We'll use static variables to track if we've already shown them
+            if (!updateBarChart.firstLockShown && firstLockMsg) {
+                emojiSpan.textContent = '🔒';
+                emojiSpan.title = 'Sub Only Mode Enabled';
+                updateBarChart.firstLockShown = true;
+            } else if (!updateBarChart.firstUnlockShown && firstUnlockMsg) {
+                emojiSpan.textContent = '🔓';
+                emojiSpan.title = 'Sub Only Mode Disabled';
+                updateBarChart.firstUnlockShown = true;
+            }
+        }
+
+        if (windowBuckets[i] > peakThreshold && bucketMessages[i].length > 0) {
+            // Aggregate sentiments
+            const sentimentCounts = {};
+            bucketMessages[i].forEach(msg => {
+                if (Array.isArray(msg.predictions)) {
+                    msg.predictions.forEach(pred => {
+                        sentimentCounts[pred.sentiment] = (sentimentCounts[pred.sentiment] || 0) + 1;
+                    });
+                }
+            });
+            // Find top sentiment not in toggledSentiments
+            const sortedSentiments = Object.entries(sentimentCounts)
+                .sort((a, b) => b[1] - a[1]);
+            let topSentiment = null;
+            for (const [sentiment] of sortedSentiments) {
+                if (!(toggledSentiments && toggledSentiments.has(sentiment))) {
+                    topSentiment = [sentiment, sentimentCounts[sentiment]];
+                    break;
+                }
+            }
+            if (topSentiment) {
+                emojiSpan.textContent = sentimentEmojis[topSentiment[0]] || sentimentEmojis.default;
+            }
+        }
+        barChartEmojiRow.appendChild(emojiSpan);
     }
 }
 

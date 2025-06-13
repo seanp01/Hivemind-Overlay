@@ -6,6 +6,7 @@ const llm = new LLMService();
 class ChatClient {
     constructor(platform) {
         this.platform = platform; // 'twitch' or 'youtube'
+        this.subOnlyMode = false; // Tracks if the channel is in sub-only mode
         this.chatMessages = [];
         this.eventListeners = {};
         this.twitchClient = null; // Will hold the tmi.js client instance
@@ -44,8 +45,29 @@ class ChatClient {
                     user: tags['display-name'] || tags.username,
                     message,
                     platform: 'twitch',
-                    tags
+                    tags,
+                    subOnlyMode: this.subOnlyMode
                 });
+            });
+
+            this.twitchClient.on('roomstate', (channel, state) => {
+                if ('subs-only' in state) {
+                    if (state['subs-only'] === true) {
+                        this.subOnlyMode = true;
+                    } else {
+                        this.subOnlyMode = false; // Reset if not in sub-only mode
+                    }
+                }
+            });
+
+            this.twitchClient.on('roomstate', (channel, state) => {
+                if ('subs-only' in state) {
+                    if (state['subs-only'] === true) {
+                        this.subOnlyMode = true;
+                    } else {
+                        this.subOnlyMode = false; // Reset if not in sub-only mode
+                    }
+                }
             });
 
             this.twitchClient.on('connected', () => {
