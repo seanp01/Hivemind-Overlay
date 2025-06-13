@@ -1,5 +1,37 @@
 import Chart from 'chart.js/auto';
-
+// Sentiment color palette: unique, visually distinct colors for each sentiment
+export const sentimentColorPalette = {
+    positive:    '#43A047', // green
+    negative:    '#E53935', // red
+    neutral:     '#90A4AE', // gray-blue
+    mixed:       '#1E88E5', // blue
+    happy:       '#FFD600', // bright yellow
+    sad:         '#5E35B1', // purple
+    angry:       '#F4511E', // orange-red
+    surprised:   '#00B8D4', // cyan
+    fear:        '#8D6E63', // brown
+    sarcastic:   '#FFB300', // amber
+    hype:        '#00E676', // neon green
+    cringe:      '#D81B60', // magenta
+    joke:        '#FDD835', // gold
+    mocking:     '#6D4C41', // dark brown
+    toxic:       '#212121', // black
+    confused:    '#7E57C2', // lavender
+    copypasta:   '#FF7043', // coral
+    emote_spam:  '#29B6F6', // sky blue
+    bait:        '#FF8A65', // peach
+    question:    '#3949AB', // indigo
+    command_request: '#C0CA33', // lime
+    insightful:  '#00ACC1', // teal
+    meta:        '#B2FF59', // light green
+    criticism:   '#C62828', // dark red
+    backseat:    '#F9A825', // yellow-orange
+    fan_theory:  '#8E24AA', // deep purple
+    supportive:  '#388E3C', // forest green
+    personal_story: '#A1887F', // taupe
+    reaction_gif_text: '#F06292', // pink
+    default:     '#B0BEC5'  // fallback gray
+};
 /**
  * Create a sticky/floating button bar for popout/minimize/expand buttons.
  * Improved styling: more rounded corners, slightly lower opacity, subtle shadow.
@@ -359,7 +391,16 @@ timeSlider.addEventListener('input', () => {
 
     // 2. Filter messages in the window
     const windowMessages = chatBuffer.filter(msg => msg.ts >= windowStart && msg.ts <= windowEnd);
+    const messagesContainer = document.getElementById('hivemind-messages');
 
+    if (messagesContainer) {
+        messagesContainer.innerHTML = '';
+        windowMessages.forEach(msg => {
+            // Use the helper function to render the message element without side effects
+            const messageElement = renderMessageElement(msg);
+            messagesContainer.appendChild(messageElement);
+        });
+    }
     // 3. Aggregate sentiment counts for the window
     const windowSentimentCounts = {};
     windowMessages.forEach(msg => {
@@ -392,7 +433,10 @@ function updatePieChart(sentimentCounts) {
     const sortedEntries = Object.entries(sentimentCounts).sort((a, b) => b[1] - a[1]);
     const labels = sortedEntries.map(([sentiment, count]) => `${sentiment} (${count})`);
     const data = sortedEntries.map(([, count]) => count);
-
+    const sentiments = sortedEntries.map(([sentiment, ]) => sentiment);
+    const backgroundColors = sentiments.map(sentiment =>
+        sentimentColorPalette[sentiment.trim().toLowerCase()] || sentimentColorPalette.default
+    );    
     if (!pieChart) {
         const ctx = pieCanvas.getContext('2d');
         pieChart = new Chart(ctx, {
@@ -401,50 +445,20 @@ function updatePieChart(sentimentCounts) {
                 labels: labels,
                 datasets: [{
                     data: data,
-                    backgroundColor: [
-                        '#4CAF50',   // positive
-                        '#F44336',   // negative
-                        '#B0BEC5',   // neutral
-                        '#2196F3',   // mixed
-                        '#81C784',   // happy
-                        '#9575CD',   // sad
-                        '#E57373',   // angry
-                        '#FFD54F',   // surprised
-                        '#9575CD',   // fear
-                        '#FF9800',   // sarcastic
-                        '#39FF14',   // hype
-                        '#FF69B4',   // cringe
-                        '#FFD700',   // joke
-                        '#8D6E63',   // mocking
-                        '#B71C1C',   // toxic
-                        '#90CAF9',   // confused
-                        '#CE93D8',   // copypasta
-                        '#00B8D4',   // emote_spam
-                        '#FF7043',   // bait
-                        '#64B5F6',   // question
-                        '#AEEA00',   // command_request
-                        '#00E676',   // insightful
-                        '#FFD54F',   // meta
-                        '#FF8A65',   // criticism
-                        '#FFB300',   // backseat
-                        '#7E57C2',   // fan_theory
-                        '#00C853',   // supportive
-                        '#A1887F',   // personal_story
-                        '#F06292',   // reaction_gif_text
-                        '#B0BEC5'    // default/fallback
-                    ]
+                    backgroundColor: backgroundColors
                 }]
             },
             options: {
-                responsive: false, 
-                maintainAspectRatio: false,
-                plugins: { legend: { display: true, position: 'right' } }
+            responsive: false, 
+            maintainAspectRatio: false,
+            plugins: { legend: { display: true, position: 'right' } }
             }
         });
     } else {
         // Update data and labels
         pieChart.data.labels = labels;
         pieChart.data.datasets[0].data = data;
+        pieChart.data.datasets[0].backgroundColor = backgroundColors; // <-- add this
         pieChart.update();
     }
 }
@@ -553,10 +567,6 @@ function updateRankingList(sortedSentiments) {
             }
         }
         li.style.padding = '0.5px 0'; // Add vertical padding
-        // Sentiment label
-        // const sentimentLabel = document.createElement('span');
-        // sentimentLabel.textContent = item.sentiment;
-        // sentimentLabel.style.marginRight = '1px';
 
         // Arrow (if any)
         if (arrow) {
@@ -627,113 +637,7 @@ chatClient.on('message', (msg) => {
 });
 
 const addMessageToOverlay = (message) => {
-    const messageElement = document.createElement('div');
-
-    // Alternate user colors
-    const userColors = [
-        '#4FC3F7', '#FFB74D', '#81C784', '#BA68C8', '#FFD54F',
-        '#E57373', '#64B5F6', '#A1887F', '#90A4AE', '#F06292',
-        '#AED581', '#FFF176', '#9575CD', '#4DB6AC', '#FF8A65',
-        '#DCE775', '#7986CB', '#B0BEC5', '#F44336', '#00BCD4'
-    ];
-    if (!addMessageToOverlay.userColorMap) addMessageToOverlay.userColorMap = {};
-    let userColor = userColors[0];
-    if (message.user) {
-        if (!addMessageToOverlay.userColorMap[message.user]) {
-            const idx = Object.keys(addMessageToOverlay.userColorMap).length % userColors.length;
-            addMessageToOverlay.userColorMap[message.user] = userColors[idx];
-        }
-        userColor = addMessageToOverlay.userColorMap[message.user];
-    }
-
-    // User styling
-    const userSpan = document.createElement('span');
-    userSpan.textContent = message.user + ": ";
-    userSpan.style.fontWeight = 'bold';
-    userSpan.style.color = userColor;
-
-    // Message text
-    const textSpan = document.createElement('span');
-    textSpan.textContent = message.message + " ";
-
-    // Sentiment badge colors
-    const sentimentColors = {
-        positive: '#4CAF50',
-        negative: '#F44336',
-        neutral: '#B0BEC5',         // Changed to grey
-        mixed: '#2196F3',
-        happy: '#81C784',
-        sad: '#9575CD',
-        angry: '#E57373',
-        surprised: '#FFD54F',
-        fear: '#9575CD',
-        sarcastic: '#FF9800',       // Orange
-        hype: '#39FF14',            // Neon green
-        cringe: '#FF69B4',          // Hot pink
-        joke: '#FFD700',            // Gold/yellow
-        mocking: '#8D6E63',         // Brownish
-        toxic: '#B71C1C',           // Dark red
-        confused: '#90CAF9',        // Light blue
-        copypasta: '#CE93D8',       // Light purple
-        emote_spam: '#00B8D4',      // Cyan
-        bait: '#FF7043',            // Deep orange
-        question: '#64B5F6',        // Blue
-        command_request: '#AEEA00', // Lime
-        insightful: '#00E676',      // Bright green
-        meta: '#FFD54F',            // Yellow
-        criticism: '#FF8A65',       // Orange
-        backseat: '#FFB300',        // Amber
-        fan_theory: '#7E57C2',      // Purple
-        supportive: '#00C853',      // Green
-        personal_story: '#A1887F',  // Taupe
-        reaction_gif_text: '#F06292', // Pink
-        // fallback
-        default: '#B0BEC5'
-    };
-
-    messageElement.appendChild(userSpan);
-    messageElement.appendChild(textSpan);
-
-    // Sentiment badges
-    // Create a flex container for message text and badges
-    messageElement.style.display = 'flex';
-    messageElement.style.alignItems = 'center';
-    messageElement.style.justifyContent = 'space-between';
-
-    // Left: user and message
-    const leftContainer = document.createElement('span');
-    leftContainer.appendChild(userSpan);
-    leftContainer.appendChild(textSpan);
-
-    // Right: badges
-    const rightContainer = document.createElement('span');
-    rightContainer.style.display = 'flex';
-    rightContainer.style.gap = '4px';
-
-    if (Array.isArray(message.predictions) && message.predictions.length > 0) {
-        message.predictions
-            .slice(0, 3)
-            .filter(sentiment => sentiment.score * 100 >= 1) // Only show if score >= 1%
-            .forEach(sentiment => {
-                const badge = document.createElement('span');
-                badge.textContent = sentiment.sentiment;
-                badge.style.display = 'inline-block';
-                badge.style.padding = '2px 8px';
-                badge.style.marginLeft = 'auto';
-                badge.style.marginRight = '0';
-                badge.style.borderRadius = '12px';
-                badge.style.fontSize = '12px';
-                badge.style.fontWeight = 'bold';
-                badge.style.backgroundColor = sentimentColors[sentiment.sentiment] || sentimentColors.default;
-                badge.style.color = '#222';
-                badge.style.border = '1px solid #fff2';
-                badge.style.verticalAlign = 'middle';
-                rightContainer.appendChild(badge);
-            });
-    }
-
-    messageElement.appendChild(leftContainer);
-    messageElement.appendChild(rightContainer);
+    const messageElement = renderMessageElement(message);
 
     // Create a parent container for messages
     let messagesContainer = document.getElementById('hivemind-messages');
@@ -755,7 +659,79 @@ const addMessageToOverlay = (message) => {
     bufferMessage(message);
     if (!chatPaused) updateBarChart();
     if (!chatPaused) updatePieChartForWindow();
+    if (!chatPaused) updateTimelineLabels();
 };
+
+function renderMessageElement(message) {
+    // Alternate user colors
+    const userColors = [
+        '#4FC3F7', '#FFB74D', '#81C784', '#BA68C8', '#FFD54F',
+        '#E57373', '#64B5F6', '#A1887F', '#90A4AE', '#F06292',
+        '#AED581', '#FFF176', '#9575CD', '#4DB6AC', '#FF8A65',
+        '#DCE775', '#7986CB', '#B0BEC5', '#F44336', '#00BCD4'
+    ];
+    if (!renderMessageElement.userColorMap) renderMessageElement.userColorMap = {};
+    let userColor = userColors[0];
+    if (message.user) {
+        if (!renderMessageElement.userColorMap[message.user]) {
+            const idx = Object.keys(renderMessageElement.userColorMap).length % userColors.length;
+            renderMessageElement.userColorMap[message.user] = userColors[idx];
+        }
+        userColor = renderMessageElement.userColorMap[message.user];
+    }
+
+    // User styling
+    const userSpan = document.createElement('span');
+    userSpan.textContent = message.user + ": ";
+    userSpan.style.fontWeight = 'bold';
+    userSpan.style.color = userColor;
+
+    // Message text
+    const textSpan = document.createElement('span');
+    textSpan.textContent = message.message + " ";
+
+    // Sentiment badges
+    const rightContainer = document.createElement('span');
+    rightContainer.style.display = 'flex';
+    rightContainer.style.gap = '4px';
+
+    if (Array.isArray(message.predictions) && message.predictions.length > 0) {
+        message.predictions
+            .slice(0, 3)
+            .filter(sentiment => sentiment.score * 100 >= 1)
+            .forEach(sentiment => {
+                const badge = document.createElement('span');
+                badge.textContent = sentiment.sentiment;
+                badge.style.display = 'inline-block';
+                badge.style.padding = '2px 8px';
+                badge.style.marginLeft = 'auto';
+                badge.style.marginRight = '0';
+                badge.style.borderRadius = '12px';
+                badge.style.fontSize = '12px';
+                badge.style.fontWeight = 'bold';
+                badge.style.backgroundColor = sentimentColorPalette[sentiment.sentiment] || sentimentColorPalette.default;
+                badge.style.color = '#222';
+                badge.style.border = '1px solid #fff2';
+                badge.style.verticalAlign = 'middle';
+                rightContainer.appendChild(badge);
+            });
+    }
+
+    // Left: user and message
+    const leftContainer = document.createElement('span');
+    leftContainer.appendChild(userSpan);
+    leftContainer.appendChild(textSpan);
+
+    // Message element
+    const messageElement = document.createElement('div');
+    messageElement.style.display = 'flex';
+    messageElement.style.alignItems = 'center';
+    messageElement.style.justifyContent = 'space-between';
+    messageElement.appendChild(leftContainer);
+    messageElement.appendChild(rightContainer);
+
+    return messageElement;
+}
 
 function updateBarChart() {
     const timespan = selectedTimeFrame;
