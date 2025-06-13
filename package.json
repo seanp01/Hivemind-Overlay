@@ -30,8 +30,10 @@
     "webpack": "^5.99.9",
     "webpack-cli": "^4.10.0"
   },
-  "version": "1.7.0",
+  "version": "1.9.0",
   "changelog": {
+    "1.9.0": "Updated the legend for the pie chart. Toggling legend data now filters chat as well. ~ Sean Parker",
+    "1.8.0": "Small visual adjustment to the timeline, slider, and bar chart. ~ Sean Parker",
     "1.7.0": "Small change to the timeline to update timestamp as real time progresses. ~ Sean Parker",
     "1.6.0": "More improvements for the bar chart. The slider now functions as a time select, and a timeline has been added below the slider and bar graph. ~ Sean Parker",
     "1.5.0": "Improved the bar chart visualization by adding a windowing frame radio button selection. And introduced a timeline bar topped with a bar chart corresponding to chat message volume. ~ Sean Parker",

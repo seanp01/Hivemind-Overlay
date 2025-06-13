@@ -199,6 +199,7 @@ sentimentSummaryContainer.id = 'sentiment-summary';
 sentimentSummaryContainer.style.background = 'rgba(30,30,30,0.85)';
 sentimentSummaryContainer.style.padding = '10px';
 sentimentSummaryContainer.style.marginBottom = '10px';
+sentimentSummaryContainer.style.marginTop = '10px';
 sentimentSummaryContainer.style.borderRadius = '8px';
 sentimentSummaryContainer.style.display = 'flex';
 sentimentSummaryContainer.style.flexDirection = 'row';
@@ -266,10 +267,11 @@ timeSlider.min = 0;
 timeSlider.max = 99;
 timeSlider.value = 99;
 timeSlider.step = 1;
-timeSlider.style.width = '91%';  
-timeSlider.style.height = '16px';  // Typical slider height
+timeSlider.style.width = '89.5%';  
+timeSlider.style.height = '12px';  // Typical slider height
 timeSlider.style.margin = '8px auto';
 timeSlider.style.display = 'block';
+timeSlider.style.backgroundColor = 'grey';
 
 // Vertical bar chart container
 const barChartContainer = document.createElement('div');
@@ -277,7 +279,7 @@ barChartContainer.style.display = 'flex';
 barChartContainer.style.flexDirection = 'row';
 barChartContainer.style.alignItems = 'flex-end';
 barChartContainer.style.height = '60px'; // Height of the bars
-barChartContainer.style.width = '90%';  
+barChartContainer.style.width = '88%';  
 barChartContainer.style.justifyContent = 'flex-start';
 barChartContainer.style.gap = '1px';
 barChartContainer.style.margin = '0 auto';
@@ -286,7 +288,7 @@ barChartContainer.style.margin = '0 auto';
 const sliderTicksContainer = document.createElement('div');
 sliderTicksContainer.style.display = 'flex';
 sliderTicksContainer.style.justifyContent = 'space-between';
-sliderTicksContainer.style.width = '91%';
+sliderTicksContainer.style.width = '90%';
 sliderTicksContainer.style.fontSize = '11px';
 sliderTicksContainer.style.color = '#bbb';
 sliderTicksContainer.style.marginTop = '-4px'; // Pull closer to slider
@@ -315,7 +317,7 @@ sliderBarContainer.appendChild(timelineContainer);
 
 const chatBuffer = [];
 const MAX_BUFFER_SECONDS = 600; // 10 minutes
-
+let windowMessages = [];
 function bufferMessage(message) {
     chatBuffer.push({ ...message, ts: Date.now() });
     // Remove old messages
@@ -390,17 +392,9 @@ timeSlider.addEventListener('input', () => {
     const windowStart = windowEnd - selectedTimeFrame * 1000;
 
     // 2. Filter messages in the window
-    const windowMessages = chatBuffer.filter(msg => msg.ts >= windowStart && msg.ts <= windowEnd);
+    windowMessages = chatBuffer.filter(msg => msg.ts >= windowStart && msg.ts <= windowEnd) || [];
     const messagesContainer = document.getElementById('hivemind-messages');
 
-    if (messagesContainer) {
-        messagesContainer.innerHTML = '';
-        windowMessages.forEach(msg => {
-            // Use the helper function to render the message element without side effects
-            const messageElement = renderMessageElement(msg);
-            messagesContainer.appendChild(messageElement);
-        });
-    }
     // 3. Aggregate sentiment counts for the window
     const windowSentimentCounts = {};
     windowMessages.forEach(msg => {
@@ -411,14 +405,23 @@ timeSlider.addEventListener('input', () => {
         }
     });
 
+    if (messagesContainer) {
+        messagesContainer.innerHTML = '';
+        windowMessages.forEach(msg => {
+            // Use the helper function to render the message element without side effects
+            const messageElement = renderMessageElement(msg);
+            messagesContainer.appendChild(messageElement);
+        });
+    }
+
     // 4. Update the pie chart and ranking list
     updatePieChart(windowSentimentCounts);
 
     // Prevent slider from resizing by setting a fixed width and min/max width
-    timeSlider.style.width = '91%';
+    timeSlider.style.width = '90%';
     timeSlider.style.minWidth = '0';
-    timeSlider.style.maxWidth = '91%';
-
+    timeSlider.style.maxWidth = '90%';
+    scrollOverlayToBottom();
     updateSliderTicks();
     updateBarChart(); // Optionally update bar chart to reflect new window
     updateTimelineLabels();
@@ -427,6 +430,7 @@ timeSlider.addEventListener('input', () => {
 updateTimelineLabels();
 
 // --- Chart.js Pie Chart Setup (make sure Chart.js is loaded in your extension) ---
+let toggledSentiments = new Set();
 let pieChart;
 function updatePieChart(sentimentCounts) {
     // Sort sentimentCounts by count descending
@@ -442,23 +446,86 @@ function updatePieChart(sentimentCounts) {
         pieChart = new Chart(ctx, {
             type: 'pie',
             data: {
-                labels: labels,
+                labels: labels, // Slice labels
                 datasets: [{
                     data: data,
-                    backgroundColor: backgroundColors
+                    backgroundColor: backgroundColors,
                 }]
             },
             options: {
-            responsive: false, 
-            maintainAspectRatio: false,
-            plugins: { legend: { display: true, position: 'right' } }
+                responsive: false,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: true,
+                        position: 'right',
+                        labels: {
+                            generateLabels: function(chart) {
+                                const data = chart.data;
+                                if (data.labels.length && data.datasets.length) {
+                                    return data.labels.map((label, i) => ({
+                                        text: label,
+                                        fontColor: '#fff',
+                                        color: '#fff',
+                                        fillStyle: data.datasets[0].backgroundColor[i],
+                                        hidden: chart.getDatasetMeta(0).data[i].hidden,
+                                        index: i,
+                                        datasetIndex: 0 // Important for onClick!
+                                    }));
+                                }
+                                return [];
+                            }
+                        },
+                        onClick: function(e, legendItem, legend) {
+                            const chart = legend.chart;
+                            const index = legendItem.index;
+                            // Remove the (#) tally from the label to get the sentiment name
+                            const sentiment = chart.data.labels[index].replace(/\s*\(\d+\)$/, '').trim().toLowerCase();
+
+                            if (toggledSentiments.has(sentiment)) {
+                                toggledSentiments.delete(sentiment);
+                            } else {
+                                toggledSentiments.add(sentiment);
+                            }
+
+                            // After toggling, update all slices' hidden state based on sentiment key
+                            const meta = chart.getDatasetMeta(legendItem.datasetIndex);
+                            meta.data.forEach((slice, i) => {
+                                const sliceSentiment = chart.data.labels[i].replace(/\s*\(\d+\)$/, '').trim().toLowerCase();
+                                slice.hidden = toggledSentiments.has(sliceSentiment);
+                            });
+
+                            chart.update();
+                            const messagesContainer = document.getElementById('hivemind-messages');
+                            if (messagesContainer) {
+                                messagesContainer.innerHTML = '';
+                                windowMessages.forEach(msg => {
+                                    if (msg.predictions.some(pred => toggledSentiments.has(pred.sentiment))) return;
+                                    // Use the helper function to render the message element without side effects
+                                    const messageElement = renderMessageElement(msg);
+                                    messagesContainer.appendChild(messageElement);
+                                });
+                            }
+                        }
+                    }
+                }
             }
         });
     } else {
-        // Update data and labels
         pieChart.data.labels = labels;
         pieChart.data.datasets[0].data = data;
-        pieChart.data.datasets[0].backgroundColor = backgroundColors; // <-- add this
+        pieChart.data.datasets[0].backgroundColor = backgroundColors;
+
+        // After updating data, re-apply hidden state to slices
+        const meta = pieChart.getDatasetMeta(0);
+        meta.data.forEach((slice, i) => {
+            if (pieChart.data.labels[i] === undefined) {
+                return;
+            }
+            const sliceSentiment = pieChart.data.labels[i].replace(/\s*\(\d+\)$/, '').trim().toLowerCase();
+            slice.hidden = toggledSentiments.has(sliceSentiment);
+        });
+
         pieChart.update();
     }
 }
@@ -524,7 +591,7 @@ function updateSliderTicks() {
 function updatePieChartForWindow() {
     const now = Date.now();
     const cutoff = now - selectedTimeFrame * 1000;
-    const windowMessages = chatBuffer.filter(msg => msg.ts >= cutoff);
+    windowMessages = chatBuffer.filter(msg => msg.ts >= cutoff) || [];
 
     // Aggregate sentiment counts in the window
     const windowSentimentCounts = {};
@@ -621,11 +688,9 @@ sentimentSummaryContainer.appendChild(pieWrapper);
 let chatPaused = false;
 // stay scrolled to the bottom
 const scrollOverlayToBottom = () => {
-    if (!chatPaused) {
-        const messagesContainer = document.getElementById('hivemind-messages');
-        if (messagesContainer) {
-            messagesContainer.scrollTop = messagesContainer.scrollHeight;
-        }
+    const messagesContainer = document.getElementById('hivemind-messages');
+    if (messagesContainer) {
+        messagesContainer.scrollTop = messagesContainer.scrollHeight;
     }
 };
 
@@ -633,6 +698,10 @@ import ChatClient from '../src/chatClient/index.js';
 
 const chatClient = new ChatClient('twitch'); // or 'youtube'
 chatClient.on('message', (msg) => {
+    console.log(toggledSentiments);
+    aggregateSentiment(msg);
+    bufferMessage(msg);
+    if (toggledSentiments && msg.predictions.some(pred => toggledSentiments.has(pred.sentiment))) return;
     addMessageToOverlay(msg)
 });
 
@@ -655,8 +724,6 @@ const addMessageToOverlay = (message) => {
     }
     messagesContainer.appendChild(messageElement);
     scrollOverlayToBottom();
-    aggregateSentiment(message);
-    bufferMessage(message);
     if (!chatPaused) updateBarChart();
     if (!chatPaused) updatePieChartForWindow();
     if (!chatPaused) updateTimelineLabels();
