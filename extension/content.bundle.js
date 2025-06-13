@@ -18513,8 +18513,12 @@ __webpack_require__.r(__webpack_exports__);
 
 /**
  * Create a sticky/floating button bar for popout/minimize/expand buttons.
+ * Improved styling: more rounded corners, slightly lower opacity, subtle shadow.
  */
 const buttonBar = document.createElement('div');
+buttonBar.style.background = 'rgba(173, 169, 169, 0.90)';
+buttonBar.style.borderRadius = '12px';
+buttonBar.style.boxShadow = '0 4px 16px #0002';
 buttonBar.style.position = 'sticky';
 buttonBar.style.top = '0';
 buttonBar.style.left = '0';
@@ -18523,10 +18527,8 @@ buttonBar.style.display = 'flex';
 buttonBar.style.justifyContent = 'flex-end';
 buttonBar.style.alignItems = 'center';
 buttonBar.style.gap = '8px';
-buttonBar.style.background = 'rgba(173, 169, 169, 0.57)';
 buttonBar.style.zIndex = '10001';
-buttonBar.style.padding = '4px 0 4px 0';
-buttonBar.style.boxShadow = '0 2px 8px #0002';
+buttonBar.style.padding = '4px 4px 4px 4px';
 const popoutButton = document.createElement('button');
 popoutButton.textContent = '⧉';
 popoutButton.title = 'Pop out overlay';
@@ -18543,6 +18545,9 @@ popoutButton.style.display = 'flex';
 popoutButton.style.alignItems = 'center';
 popoutButton.style.justifyContent = 'center';
 popoutButton.style.textAlign = 'center';
+popoutButton.style.lineHeight = '1'; // Ensures vertical centering
+popoutButton.style.padding = '0'; // Remove extra space
+
 const minimizeButton = document.createElement('button');
 minimizeButton.textContent = '−';
 minimizeButton.title = 'Minimize overlay';
@@ -18636,6 +18641,8 @@ timeFrames.forEach(tf => {
   radio.addEventListener('change', () => {
     selectedTimeFrame = parseInt(radio.value, 10);
     updatePieChartForWindow();
+    updateSliderTicks();
+    updateBarChart(); // (optional, but keeps everything in sync)
   });
   label.appendChild(radio);
   label.appendChild(document.createTextNode(tf.label));
@@ -18670,7 +18677,7 @@ if (!overlayContainer) {
   overlayContainer.style.zIndex = '9999';
   overlayContainer.style.maxHeight = 'calc(100vh - 30px)'; // 10px top + 20px bottom
   overlayContainer.style.overflowY = 'scroll';
-  overlayContainer.style.width = '800px';
+  overlayContainer.style.width = '1000px';
   overlayContainer.style.fontFamily = 'Arial, sans-serif';
   overlayContainer.style.fontSize = '14px';
   document.body.appendChild(overlayContainer);
@@ -18748,9 +18755,10 @@ timeSlider.min = 0;
 timeSlider.max = 99;
 timeSlider.value = 99;
 timeSlider.step = 1;
-timeSlider.style.width = '100%'; // Make it as wide as the bar chart
+timeSlider.style.width = '91%';
 timeSlider.style.height = '16px'; // Typical slider height
-timeSlider.style.margin = '8px 0';
+timeSlider.style.margin = '8px auto';
+timeSlider.style.display = 'block';
 
 // Vertical bar chart container
 const barChartContainer = document.createElement('div');
@@ -18758,15 +18766,39 @@ barChartContainer.style.display = 'flex';
 barChartContainer.style.flexDirection = 'row';
 barChartContainer.style.alignItems = 'flex-end';
 barChartContainer.style.height = '60px'; // Height of the bars
-barChartContainer.style.width = '100%'; // Full width
+barChartContainer.style.width = '90%';
 barChartContainer.style.justifyContent = 'flex-start';
 barChartContainer.style.gap = '1px';
+barChartContainer.style.margin = '0 auto';
+
+// Create a container for the timestamps
+const sliderTicksContainer = document.createElement('div');
+sliderTicksContainer.style.display = 'flex';
+sliderTicksContainer.style.justifyContent = 'space-between';
+sliderTicksContainer.style.width = '91%';
+sliderTicksContainer.style.fontSize = '11px';
+sliderTicksContainer.style.color = '#bbb';
+sliderTicksContainer.style.marginTop = '-4px'; // Pull closer to slider
+sliderTicksContainer.style.marginLeft = 'auto';
+sliderTicksContainer.style.marginRight = 'auto';
 
 // Add slider and bar chart to the container
 sliderBarContainer.appendChild(barChartContainer);
 sliderBarContainer.appendChild(timeSlider);
+sliderBarContainer.appendChild(sliderTicksContainer);
+updateSliderTicks();
+
 // Insert the sliderBarContainer into your overlay (e.g., after sentimentSummaryContainer)
 overlayContainer.appendChild(sliderBarContainer);
+const timelineContainer = document.createElement('div');
+timelineContainer.style.display = 'flex';
+timelineContainer.style.justifyContent = 'space-between';
+timelineContainer.style.width = '100%';
+timelineContainer.style.fontSize = '11px';
+timelineContainer.style.color = '#bbb';
+timelineContainer.style.marginTop = '-2px'; // Adjust as needed
+
+sliderBarContainer.appendChild(timelineContainer);
 const chatBuffer = [];
 const MAX_BUFFER_SECONDS = 600; // 10 minutes
 
@@ -18782,9 +18814,92 @@ function bufferMessage(message) {
   }
 }
 timeSlider.addEventListener('input', () => {
-  // You can use timeSlider.value to select a time window
-  // Optionally update other UI elements here
+  chatPaused = true; // Pause chat updates while adjusting slider
+  // Show overlay button if chat is paused
+  let pauseOverlay = document.getElementById('hivemind-pause-overlay');
+  if (!pauseOverlay) {
+    pauseOverlay = document.createElement('div');
+    pauseOverlay.id = 'hivemind-pause-overlay';
+    pauseOverlay.style.position = 'absolute';
+    pauseOverlay.style.left = '0';
+    pauseOverlay.style.right = '0';
+    pauseOverlay.style.bottom = '0';
+    pauseOverlay.style.height = '40px';
+    pauseOverlay.style.background = 'rgba(33, 150, 243, 0.90)'; // Match button color, more blue
+    pauseOverlay.style.display = 'flex';
+    pauseOverlay.style.justifyContent = 'center';
+    pauseOverlay.style.alignItems = 'center';
+    pauseOverlay.style.zIndex = '10010';
+    pauseOverlay.style.pointerEvents = 'auto';
+    const resumeBtn = document.createElement('button');
+    resumeBtn.textContent = 'Chat Paused';
+    resumeBtn.style.transition = 'background 0.2s, color 0.2s, box-shadow 0.2s';
+    resumeBtn.style.boxShadow = '0 2px 8px #0003';
+    resumeBtn.addEventListener('mouseenter', () => {
+      resumeBtn.textContent = '↓ New Messages';
+      resumeBtn.style.background = '#1976D2'; // Slightly darker blue
+      resumeBtn.style.color = '#fff';
+      resumeBtn.style.boxShadow = '0 4px 16px #1976D2AA';
+    });
+    resumeBtn.addEventListener('mouseleave', () => {
+      resumeBtn.textContent = 'Chat Paused';
+      resumeBtn.style.background = '#2196F3'; // Match overlay
+      resumeBtn.style.color = '#fff';
+      resumeBtn.style.boxShadow = '0 2px 8px #0003';
+    });
+    resumeBtn.style.background = '#2196F3'; // Match overlay
+    resumeBtn.style.color = '#fff';
+    resumeBtn.style.border = 'none';
+    resumeBtn.style.borderRadius = '8px';
+    resumeBtn.style.padding = '8px 20px';
+    resumeBtn.style.fontWeight = 'bold';
+    resumeBtn.style.fontSize = '15px';
+    resumeBtn.style.cursor = 'pointer';
+    resumeBtn.addEventListener('click', () => {
+      chatPaused = false;
+      pauseOverlay.remove();
+      timeSlider.value = 99; // Reset slider to "now"
+    });
+    pauseOverlay.appendChild(resumeBtn);
+  }
+  // Add the pause overlay to the overlayContainer instead of messagesContainer
+  if (overlayContainer && !document.getElementById('hivemind-pause-overlay')) {
+    overlayContainer.appendChild(pauseOverlay);
+  }
+  // 1. Calculate the target timestamp for the slider value
+  const value = parseInt(timeSlider.value, 10);
+  const bufferStart = chatBuffer.length ? chatBuffer[0].ts : Date.now();
+  const bufferEnd = chatBuffer.length ? chatBuffer[chatBuffer.length - 1].ts : Date.now();
+  const bufferDuration = bufferEnd - bufferStart;
+  const sliderFraction = value / 99;
+  const windowEnd = bufferStart + sliderFraction * bufferDuration;
+  const windowStart = windowEnd - selectedTimeFrame * 1000;
+
+  // 2. Filter messages in the window
+  const windowMessages = chatBuffer.filter(msg => msg.ts >= windowStart && msg.ts <= windowEnd);
+
+  // 3. Aggregate sentiment counts for the window
+  const windowSentimentCounts = {};
+  windowMessages.forEach(msg => {
+    if (Array.isArray(msg.predictions)) {
+      msg.predictions.forEach(pred => {
+        windowSentimentCounts[pred.sentiment] = (windowSentimentCounts[pred.sentiment] || 0) + 1;
+      });
+    }
+  });
+
+  // 4. Update the pie chart and ranking list
+  updatePieChart(windowSentimentCounts);
+
+  // Prevent slider from resizing by setting a fixed width and min/max width
+  timeSlider.style.width = '91%';
+  timeSlider.style.minWidth = '0';
+  timeSlider.style.maxWidth = '91%';
+  updateSliderTicks();
+  updateBarChart(); // Optionally update bar chart to reflect new window
+  updateTimelineLabels();
 });
+updateTimelineLabels();
 
 // --- Chart.js Pie Chart Setup (make sure Chart.js is loaded in your extension) ---
 let pieChart;
@@ -18881,6 +18996,64 @@ function updatePieChart(sentimentCounts) {
     pieChart.update();
   }
 }
+function updateTimelineLabels() {
+  timelineContainer.innerHTML = '';
+  const tickCount = 8; // Match your sliderTicks
+  const value = parseInt(timeSlider.value, 10);
+  const bufferStart = chatBuffer.length ? chatBuffer[0].ts : Date.now();
+  const bufferEnd = chatBuffer.length ? chatBuffer[chatBuffer.length - 1].ts : Date.now();
+  const bufferDuration = bufferEnd - bufferStart;
+  const sliderFraction = value / 99;
+  const windowEnd = bufferStart + sliderFraction * bufferDuration;
+  const windowStart = windowEnd - selectedTimeFrame * 1000;
+  const interval = selectedTimeFrame / (tickCount - 1);
+  for (let i = 0; i < tickCount; i++) {
+    const tick = document.createElement('span');
+    tick.style.flex = '1 1 0';
+    tick.style.textAlign = 'center';
+    // Calculate timestamp for this tick
+    let secondsAgo = selectedTimeFrame - i * interval;
+    let ts = windowEnd - secondsAgo * 1000;
+    const date = new Date(ts);
+    // Format as HH:MM:SS or HH:MM
+    let label = date.toLocaleTimeString([], {
+      hour: '2-digit',
+      minute: '2-digit',
+      second: selectedTimeFrame < 3600 ? '2-digit' : undefined
+    });
+    tick.textContent = label;
+    timelineContainer.appendChild(tick);
+  }
+}
+
+// Function to update tick labels based on selectedTimeFrame
+function updateSliderTicks() {
+  sliderTicksContainer.innerHTML = '';
+  // Only show two ticks: left (limit) and right ("now")
+  const leftTick = document.createElement('span');
+  leftTick.style.flex = '1 1 0';
+  leftTick.style.textAlign = 'left';
+  // Format left label as mm:ss or h:mm:ss
+  let label;
+  if (selectedTimeFrame >= 3600) {
+    const h = Math.floor(selectedTimeFrame / 3600);
+    const m = Math.floor(selectedTimeFrame % 3600 / 60);
+    label = `${h}h${m > 0 ? m + 'm' : ''}`;
+  } else if (selectedTimeFrame >= 60) {
+    const m = Math.floor(selectedTimeFrame / 60);
+    const s = selectedTimeFrame % 60;
+    label = s === 0 ? `${m}m` : `${m}m${s}s`;
+  } else {
+    label = `${selectedTimeFrame}s`;
+  }
+  leftTick.textContent = label;
+  sliderTicksContainer.appendChild(leftTick);
+  const rightTick = document.createElement('span');
+  rightTick.style.flex = '1 1 0';
+  rightTick.style.textAlign = 'right';
+  rightTick.textContent = 'now';
+  sliderTicksContainer.appendChild(rightTick);
+}
 function updatePieChartForWindow() {
   const now = Date.now();
   const cutoff = now - selectedTimeFrame * 1000;
@@ -18895,7 +19068,7 @@ function updatePieChartForWindow() {
       });
     }
   });
-  updatePieChart(windowSentimentCounts);
+  if (!chatPaused) updatePieChart(windowSentimentCounts);
 }
 
 // --- Ranking List with Up/Down Arrows ---
@@ -18970,23 +19143,29 @@ function aggregateSentiment(message) {
 // Pie chart canvas
 const pieCanvas = document.createElement('canvas');
 pieCanvas.id = 'sentiment-pie';
-pieCanvas.style.width = '600px';
-pieCanvas.style.height = '400px';
-pieCanvas.width = 600;
-pieCanvas.height = 400;
-pieCanvas.setAttribute('style', 'width:600px;height:400px !important;display:block;');
+pieCanvas.style.width = '900px';
+pieCanvas.style.height = '300px';
+pieCanvas.width = 900;
+pieCanvas.height = 300;
+pieCanvas.setAttribute('style', 'width:900px !important;height:300px !important;display:block;');
 const pieWrapper = document.createElement('div');
-pieWrapper.style.width = '600px';
-pieWrapper.style.height = '400px';
+pieWrapper.style.width = '900px';
+pieWrapper.style.height = '300px';
 pieWrapper.style.overflow = 'hidden';
 pieWrapper.appendChild(pieCanvas);
 sentimentSummaryContainer.style.alignItems = 'center'; // helps vertically align
 sentimentSummaryContainer.appendChild(pieWrapper);
-sentimentSummaryContainer.appendChild(movementArrowList);
+//sentimentSummaryContainer.appendChild(movementArrowList);
 
+let chatPaused = false;
 // stay scrolled to the bottom
 const scrollOverlayToBottom = () => {
-  overlayContainer.scrollTop = overlayContainer.scrollHeight;
+  if (!chatPaused) {
+    const messagesContainer = document.getElementById('hivemind-messages');
+    if (messagesContainer) {
+      messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    }
+  }
 };
 
 const chatClient = new _src_chatClient_index_js__WEBPACK_IMPORTED_MODULE_1__["default"]('twitch'); // or 'youtube'
@@ -19112,16 +19291,31 @@ const addMessageToOverlay = message => {
   }
   messageElement.appendChild(leftContainer);
   messageElement.appendChild(rightContainer);
-  overlayContainer.insertBefore(messageElement, sentimentSummaryContainer);
+
+  // Create a parent container for messages
+  let messagesContainer = document.getElementById('hivemind-messages');
+  if (!messagesContainer) {
+    messagesContainer = document.createElement('div');
+    messagesContainer.id = 'hivemind-messages';
+    messagesContainer.style.height = '45%';
+    messagesContainer.style.overflowY = 'auto';
+    messagesContainer.style.position = 'static';
+    messagesContainer.style.display = 'flex';
+    messagesContainer.style.flexDirection = 'column';
+    messagesContainer.style.gap = '4px';
+    // Insert messages container before sentimentSummaryContainer if not already present
+    overlayContainer.insertBefore(messagesContainer, sentimentSummaryContainer);
+  }
+  messagesContainer.appendChild(messageElement);
   scrollOverlayToBottom();
   aggregateSentiment(message);
   bufferMessage(message);
-  updateBarChart();
-  updatePieChartForWindow();
+  if (!chatPaused) updateBarChart();
+  if (!chatPaused) updatePieChartForWindow();
 };
 function updateBarChart() {
   const timespan = selectedTimeFrame;
-  const bucketCount = 40;
+  const bucketCount = 100;
   const bucketSize = timespan / bucketCount;
   const now = Date.now();
 
@@ -19139,7 +19333,8 @@ function updateBarChart() {
 
   // 2. Find the window max for scaling
   const windowMax = Math.max(...windowBuckets, 1);
-
+  // Ensure bar chart container has a fixed height to prevent UI jitter
+  barChartContainer.style.height = '60px'; // Set your desired fixed height here
   // 3. Draw bars, scaling to the window max
   barChartContainer.innerHTML = '';
   for (let i = 0; i < bucketCount; i++) {
@@ -19156,7 +19351,10 @@ function updateBarChart() {
 
 // Update bar chart when time frame changes
 timeFrameRadios.querySelectorAll('input[type=radio]').forEach(radio => {
-  radio.addEventListener('change', updateBarChart);
+  radio.addEventListener('change', () => {
+    updateBarChart();
+    updateTimelineLabels();
+  });
 });
 
 // Listen for messages from the chat client (to be implemented)

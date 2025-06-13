@@ -30,8 +30,9 @@
     "webpack": "^5.99.9",
     "webpack-cli": "^4.10.0"
   },
-  "version": "1.5.0",
+  "version": "1.6.0",
   "changelog": {
+    "1.6.0": "More improvements for the bar chart. The slider now functions as a time select, and a timeline has been added below the slider and bar graph. ~ Sean Parker",
     "1.5.0": "Improved the bar chart visualization by adding a windowing frame radio button selection. And introduced a timeline bar topped with a bar chart corresponding to chat message volume. ~ Sean Parker",
     "1.4.0": "Added a pie chart using chart.js to visualize sentiment analysis results. The chart displays the distribution of positive, negative, and neutral sentiments in real-time chat messages. And added a message sentiment cache to track frequent messages to reduce service load. ~ Sean Parker",
     "1.3.0": "First working version of the overlay that outputs predictions from the LM service by tagging sentiments to messages in chat. ~ Sean Parker",
