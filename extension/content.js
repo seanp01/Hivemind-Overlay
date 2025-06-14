@@ -85,6 +85,50 @@ buttonBar.style.gap = '8px';
 buttonBar.style.zIndex = '10001';
 buttonBar.style.padding = '4px 4px 4px 4px';
 
+/**
+ * Standard Deviation Control: Allows user to set the peak threshold for bar chart.
+ */
+const stddevControlContainer = document.createElement('div');
+stddevControlContainer.style.display = 'flex';
+stddevControlContainer.style.alignItems = 'center';
+stddevControlContainer.style.gap = '6px';
+stddevControlContainer.style.marginRight = '12px';
+
+const stddevLabel = document.createElement('label');
+stddevLabel.textContent = 'Peak Sensitivity:';
+stddevLabel.style.fontWeight = 'bold';
+stddevLabel.style.fontSize = '13px';
+stddevLabel.style.color = '#333';
+
+const stddevInput = document.createElement('input');
+stddevInput.type = 'range';
+stddevInput.min = '1';
+stddevInput.max = '5';
+stddevInput.step = '0.1';
+stddevInput.value = '2';
+stddevInput.style.width = '80px';
+stddevInput.style.margin = '0 6px';
+
+const stddevValue = document.createElement('span');
+stddevValue.textContent = stddevInput.value + 'σ';
+stddevValue.style.fontWeight = 'bold';
+stddevValue.style.fontSize = '13px';
+
+stddevInput.addEventListener('input', () => {
+    stddevValue.textContent = stddevInput.value + 'σ';
+    updateBarChart.peakStddev = parseFloat(stddevInput.value);
+    updateBarChart();
+});
+
+// Default value for peak threshold
+updateBarChart.peakStddev = parseFloat(stddevInput.value);
+
+stddevControlContainer.appendChild(stddevLabel);
+stddevControlContainer.appendChild(stddevInput);
+stddevControlContainer.appendChild(stddevValue);
+
+// Insert before popout/minimize/expand buttons, after timeFrameRadios
+
 const popoutButton = document.createElement('button');
 popoutButton.textContent = '⧉';
 popoutButton.title = 'Pop out overlay';
@@ -206,6 +250,7 @@ expandButton.style.right = '10px';
 expandButton.style.zIndex = '10002';
 expandButton.style.display = 'none';
 // Move button creation here so they're not appended directly to overlayContainer
+buttonBar.appendChild(stddevControlContainer);
 buttonBar.appendChild(popoutButton);
 buttonBar.appendChild(minimizeButton);
 // This file injects overlay/UI elements into Twitch and YouTube pages, allowing real-time monitoring and interaction with live chats.
@@ -995,7 +1040,7 @@ function updateBarChart() {
     // 3. Detect more extreme peaks (e.g., > mean + 3*stddev)
     const mean = windowBuckets.reduce((a, b) => a + b, 0) / bucketCount;
     const stddev = Math.sqrt(windowBuckets.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / bucketCount);
-    const peakThreshold = mean + 2 * stddev;
+    const peakThreshold = mean + (updateBarChart.peakStddev || 2) * stddev;
 
     // 4. Draw bars, scaling to the window max
 
