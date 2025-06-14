@@ -30,8 +30,9 @@
     "webpack": "^5.99.9",
     "webpack-cli": "^4.10.0"
   },
-  "version": "1.11.0",
+  "version": "1.12.0",
   "changelog": {
+    "1.12.0": "Updated emoji sentiments to support tooltips, and implemented more dynamic sizing for the sentiment charts. ~ Sean Parker",
     "1.11.0": "Bug fixes and refinements for the bar chart and time slider. ~ Sean Parker",
     "1.10.0": "Implemented a line of emojis to indicate sentiment shifts during peak chat message volumes. ~ Sean Parker",
     "1.9.0": "Updated the legend for the pie chart. Toggling legend data now filters chat as well. ~ Sean Parker",

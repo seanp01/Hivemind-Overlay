@@ -316,17 +316,16 @@ barChartContainer.style.display = 'flex';
 barChartContainer.style.flexDirection = 'row';
 barChartContainer.style.alignItems = 'flex-end';
 barChartContainer.style.height = '60px'; // Height of the bars
-barChartContainer.style.width = '88%';  
+barChartContainer.style.width = '90%';  
 barChartContainer.style.justifyContent = 'flex-start';
 barChartContainer.style.gap = '1px';
-barChartContainer.style.margin = '0 auto';
 
 const barChartEmojiRow = document.createElement('div');
 barChartEmojiRow.style.display = 'flex';
 barChartEmojiRow.style.flexDirection = 'row';
 barChartEmojiRow.style.alignItems = 'flex-start';
-barChartEmojiRow.style.height = '20px'; // Height for emoji row
-barChartEmojiRow.style.width = '86%';
+barChartEmojiRow.style.height = '15px'; // Height for emoji row
+barChartEmojiRow.style.width = '88%';
 barChartEmojiRow.style.margin = '0 auto';
 barChartEmojiRow.style.justifyContent = 'flex-start';
 barChartEmojiRow.style.gap = '1px';
@@ -342,8 +341,73 @@ sliderTicksContainer.style.marginTop = '-4px'; // Pull closer to slider
 sliderTicksContainer.style.marginLeft = 'auto';
 sliderTicksContainer.style.marginRight = 'auto';
 
+// Create or get the y-axis container and insert it as a sibling to the bar chart container
+let yAxisContainer = document.getElementById('hivemind-bar-yaxis');
+if (!yAxisContainer) {
+    yAxisContainer = document.createElement('div');
+    yAxisContainer.id = 'hivemind-bar-yaxis';
+    yAxisContainer.style.display = 'flex';
+    yAxisContainer.style.flexDirection = 'column';
+    yAxisContainer.style.justifyContent = 'space-between';
+    yAxisContainer.style.height = '80px';
+    yAxisContainer.style.marginRight = '4px';
+    yAxisContainer.style.fontSize = '12px';
+    yAxisContainer.style.color = '#bbb';
+    yAxisContainer.style.textAlign = 'right';
+    yAxisContainer.style.userSelect = 'none';
+}
+
+// Create y-axis line with ticks
+const yAxisLineContainer = document.createElement('div');
+yAxisLineContainer.style.display = 'flex';
+yAxisLineContainer.style.flexDirection = 'column';
+yAxisLineContainer.style.justifyContent = 'space-between';
+yAxisLineContainer.style.alignItems = 'flex-end';
+yAxisLineContainer.style.height = barChartContainer.style.height;
+yAxisLineContainer.style.width = '18px'; // Adjust width as needed
+yAxisLineContainer.style.marginRight = '10px';
+yAxisLineContainer.style.position = 'relative';
+
+const yAxisTicks = 3;
+for (let i = 0; i < yAxisTicks; i++) {
+    // Draw the vertical axis line only on the first tick (full height)
+    if (i === 0) {
+        const axisLine = document.createElement('div');
+        axisLine.style.position = 'absolute';
+        axisLine.style.left = '8px';
+        axisLine.style.top = '0';
+        axisLine.style.bottom = '0';
+        axisLine.style.width = '2px';
+        axisLine.style.background = '#bbb';
+        axisLine.style.height = '100%';
+        axisLine.style.zIndex = '1';
+        yAxisLineContainer.appendChild(axisLine);
+    }
+    // Draw the tick mark
+    const tickMark = document.createElement('div');
+    tickMark.style.width = '10px';
+    tickMark.style.height = '2px';
+    tickMark.style.background = '#bbb';
+    tickMark.style.position = 'right';
+    tickMark.style.left = '0'; // Align tick mark to the left edge (touching the axis line)
+    tickMark.style.zIndex = '2';
+    yAxisLineContainer.appendChild(tickMark);
+}
+
+// Ensure sliderBarContainer uses a row layout for y-axis + bar chart
+const barChartRow = document.createElement('div');
+barChartRow.style.display = 'flex';
+barChartRow.style.flexDirection = 'row';
+barChartRow.style.alignItems = 'flex-end';
+barChartRow.appendChild(yAxisContainer);
+barChartRow.appendChild(yAxisLineContainer);
+barChartRow.appendChild(barChartContainer);
+barChartRow.style.width = '100%';
+
+// Replace direct barChartContainer append with barChartRow
+sliderBarContainer.appendChild(barChartRow);
+
 // Add slider and bar chart to the container
-sliderBarContainer.appendChild(barChartContainer);
 sliderBarContainer.appendChild(barChartEmojiRow);
 sliderBarContainer.appendChild(timeSlider);
 sliderBarContainer.appendChild(sliderTicksContainer);
@@ -564,6 +628,7 @@ function updatePieChart(sentimentCounts) {
                                     messagesContainer.appendChild(messageElement);
                                 });
                             }
+                            updateBarChart(); // Update bar chart to reflect new sentiment visibility
                         }
                     }
                 }
@@ -890,6 +955,22 @@ function updateBarChart() {
     const peakThreshold = mean + 2 * stddev;
 
     // 4. Draw bars, scaling to the window max
+
+    yAxisContainer.innerHTML = '';
+    const yTicks = 3;
+    const tickInterval = niceTickInterval(windowMax, yTicks);
+    const topTick = tickInterval * (yTicks - 1);
+    for (let i = 0; i < yTicks; i++) {
+        const tick = document.createElement('div');
+        tick.style.flex = '1 1 0';
+        tick.style.height = '3px';
+        tick.style.display = 'flex';
+        tick.style.alignItems = 'flex-end';
+        tick.style.justifyContent = 'flex-end';
+        const value = topTick - i * tickInterval;
+        tick.textContent = value;
+        yAxisContainer.appendChild(tick);
+    }
     barChartContainer.innerHTML = '';
     barChartEmojiRow.innerHTML = '';
     // Reset static variables for lock/unlock emoji
@@ -911,10 +992,9 @@ function updateBarChart() {
         emojiSpan.style.display = 'inline-block';
         emojiSpan.style.width = `${100 / bucketCount}%`;
         emojiSpan.style.textAlign = 'center';
-        emojiSpan.style.fontSize = '18px';
+        emojiSpan.style.fontSize = '14px';
         emojiSpan.style.userSelect = 'none';
-        emojiSpan.style.pointerEvents = 'none';
-
+        
         bar.addEventListener('mouseenter', () => {
             if (windowBuckets[i] > 0) {
                 bar.style.background = '#039BE5';
@@ -968,6 +1048,7 @@ function updateBarChart() {
             }
             if (topSentiment) {
                 emojiSpan.textContent = sentimentEmojis[topSentiment[0]] || sentimentEmojis.default;
+                emojiSpan.title = topSentiment[0] || 'Sentiment';
             }
         }
         barChartEmojiRow.appendChild(emojiSpan);
@@ -1007,3 +1088,19 @@ chrome.runtime.sendMessage(
         }
     }
 );
+
+// Helper to find a "nice" round number for axis ticks
+function niceTickInterval(maxValue, tickCount) {
+    if (maxValue === 0) return 1;
+    const rough = maxValue / (tickCount - 1);
+    const pow10 = Math.pow(10, Math.floor(Math.log10(rough)));
+    const niceSteps = [1, 2, 5, 10];
+    let bestStep = pow10;
+    for (let step of niceSteps) {
+        if (pow10 * step >= rough) {
+            bestStep = pow10 * step;
+            break;
+        }
+    }
+    return bestStep;
+}
