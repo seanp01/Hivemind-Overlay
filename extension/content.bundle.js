@@ -18657,6 +18657,7 @@ const sentimentColorPalette = {
   // pink
   default: '#B0BEC5' // fallback gray
 };
+
 /**
  * Create a sticky/floating button bar for popout/minimize/expand buttons.
  * Improved styling: more rounded corners, slightly lower opacity, subtle shadow.
@@ -18961,7 +18962,7 @@ timelineContainer.style.marginTop = '-2px'; // Adjust as needed
 
 sliderBarContainer.appendChild(timelineContainer);
 const chatBuffer = [];
-const MAX_BUFFER_SECONDS = 600; // 10 minutes
+const MAX_BUFFER_SECONDS = timeFrames[timeFrames.length - 1].value; // 24h (86400 seconds)
 let windowMessages = [];
 function bufferMessage(message) {
   chatBuffer.push({
@@ -18974,6 +18975,19 @@ function bufferMessage(message) {
     chatBuffer.shift();
   }
 }
+/**
+ * Adjust the timeSlider so that its range always matches the selectedTimeFrame.
+ * The slider's left (0) is the oldest point in the buffer that still covers the selectedTimeFrame,
+ * and right (99) is "now".
+ * When the time frame changes, reset the slider to "now".
+ */
+function adjustTimeSliderForTimeFrame() {
+  // Always keep slider at "now" when time frame changes
+  timeSlider.value = 99;
+}
+timeFrameRadios.querySelectorAll('input[type=radio]').forEach(radio => {
+  radio.addEventListener('change', adjustTimeSliderForTimeFrame);
+});
 timeSlider.addEventListener('input', () => {
   chatPaused = true; // Pause chat updates while adjusting slider
   // Show overlay button if chat is paused
@@ -19029,11 +19043,9 @@ timeSlider.addEventListener('input', () => {
   }
   // 1. Calculate the target timestamp for the slider value
   const value = parseInt(timeSlider.value, 10);
-  const bufferStart = chatBuffer.length ? chatBuffer[0].ts : Date.now();
-  const bufferEnd = chatBuffer.length ? chatBuffer[chatBuffer.length - 1].ts : Date.now();
-  const bufferDuration = bufferEnd - bufferStart;
-  const sliderFraction = value / 99;
-  const windowEnd = bufferStart + sliderFraction * bufferDuration;
+  // The slider represents the selectedTimeFrame window, with 0 = oldest, 99 = now
+  const now = Date.now();
+  const windowEnd = now - (99 - value) / 99 * selectedTimeFrame * 1000;
   const windowStart = windowEnd - selectedTimeFrame * 1000;
 
   // 2. Filter messages in the window
@@ -19359,7 +19371,7 @@ const addMessageToOverlay = message => {
     // Insert messages container before sentimentSummaryContainer if not already present
     overlayContainer.insertBefore(messagesContainer, sentimentSummaryContainer);
   }
-  messagesContainer.appendChild(messageElement);
+  if (!chatPaused) messagesContainer.appendChild(messageElement);
   scrollOverlayToBottom();
   if (!chatPaused) updateBarChart();
   if (!chatPaused) updatePieChartForWindow();
@@ -19426,23 +19438,25 @@ function renderMessageElement(message) {
   return messageElement;
 }
 function updateBarChart() {
+  let bucketCount = Math.max(10, Math.min(100, Math.round(selectedTimeFrame / 2)));
   const timespan = selectedTimeFrame;
-  const bucketCount = 100;
   const bucketSize = timespan / bucketCount;
   const now = Date.now();
 
   // 1. Build buckets for the selected window (to display)
   const windowBuckets = Array(bucketCount).fill(0);
   const bucketMessages = Array(bucketCount).fill().map(() => []);
+  const windowStart = now - timespan * 1000;
   chatBuffer.forEach(msg => {
+    // Only consider messages in the visible window
+    if (msg.ts < windowStart || msg.ts > now) return;
     const ageSec = (now - msg.ts) / 1000;
-    if (ageSec <= timespan) {
-      const bucketIdx = Math.floor((timespan - ageSec) / bucketSize);
-      if (bucketIdx >= 0 && bucketIdx < bucketCount) {
-        windowBuckets[bucketIdx]++;
-        bucketMessages[bucketIdx].push(msg);
-      }
-    }
+    // Always clamp bucketIdx to [0, bucketCount-1]
+    let bucketIdx = Math.floor((timespan - ageSec) / bucketSize);
+    if (bucketIdx < 0) bucketIdx = 0;
+    if (bucketIdx >= bucketCount) bucketIdx = bucketCount - 1;
+    windowBuckets[bucketIdx]++;
+    bucketMessages[bucketIdx].push(msg);
   });
 
   // 2. Find the window max for scaling
@@ -19451,11 +19465,14 @@ function updateBarChart() {
   // 3. Detect more extreme peaks (e.g., > mean + 3*stddev)
   const mean = windowBuckets.reduce((a, b) => a + b, 0) / bucketCount;
   const stddev = Math.sqrt(windowBuckets.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / bucketCount);
-  const peakThreshold = mean + 2.5 * stddev;
+  const peakThreshold = mean + 5 * stddev;
 
   // 4. Draw bars, scaling to the window max
   barChartContainer.innerHTML = '';
   barChartEmojiRow.innerHTML = '';
+  // Reset static variables for lock/unlock emoji
+  updateBarChart.firstLockShown = false;
+  updateBarChart.firstUnlockShown = false;
   for (let i = 0; i < bucketCount; i++) {
     // --- Bar ---
     const bar = document.createElement('div');
