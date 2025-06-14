@@ -18773,6 +18773,10 @@ timeFrameRadios.style.alignItems = 'center';
 timeFrameRadios.style.gap = '8px';
 timeFrameRadios.style.marginRight = 'auto'; // push to left
 
+const legendClickState = {
+  lastClickTime: 0,
+  lastClickIndex: -1
+};
 let selectedTimeFrame = 60; // default 1m
 
 timeFrames.forEach(tf => {
@@ -18918,7 +18922,7 @@ barChartContainer.style.display = 'flex';
 barChartContainer.style.flexDirection = 'row';
 barChartContainer.style.alignItems = 'flex-end';
 barChartContainer.style.height = '60px'; // Height of the bars
-barChartContainer.style.width = '90%';
+barChartContainer.style.width = '88%';
 barChartContainer.style.justifyContent = 'flex-start';
 barChartContainer.style.gap = '1px';
 const barChartEmojiRow = document.createElement('div');
@@ -18950,7 +18954,8 @@ if (!yAxisContainer) {
   yAxisContainer.style.display = 'flex';
   yAxisContainer.style.flexDirection = 'column';
   yAxisContainer.style.justifyContent = 'space-between';
-  yAxisContainer.style.height = '80px';
+  yAxisContainer.style.height = '75px';
+  yAxisContainer.style.width = '25px'; // Adjust width as needed
   yAxisContainer.style.marginRight = '4px';
   yAxisContainer.style.fontSize = '12px';
   yAxisContainer.style.color = '#bbb';
@@ -19194,15 +19199,38 @@ function updatePieChart(sentimentCounts) {
               }
             },
             onClick: function (e, legendItem, legend) {
+              // Double-click detection
+              // If double-clicked on the same legend item within threshold, toggle ONLY this sentiment,
+              // or if already only this sentiment is visible, restore all (undo)
+
+              if (!legendClickState.lastClickTime) legendClickState.lastClickTime = 0;
+              if (legendClickState.lastClickIndex === undefined || legendClickState.lastClickIndex === null) legendClickState.lastClickIndex = -1;
+              const now = Date.now();
+              const DOUBLE_CLICK_MS = 500;
               const chart = legend.chart;
               const index = legendItem.index;
-              // Remove the (#) tally from the label to get the sentiment name
               const sentiment = chart.data.labels[index].replace(/\s*\(\d+\)$/, '').trim().toLowerCase();
-              if (toggledSentiments.has(sentiment)) {
-                toggledSentiments.delete(sentiment);
+              if (legendClickState.lastClickIndex === index && now - legendClickState.lastClickTime < DOUBLE_CLICK_MS) {
+                // If only this sentiment is visible (all others hidden), restore all
+                if (toggledSentiments.size === chart.data.labels.length - 1 && !toggledSentiments.has(sentiment)) {
+                  toggledSentiments.clear();
+                } else if (toggledSentiments.size === chart.data.labels.length - 1 && toggledSentiments.has(sentiment)) {
+                  // If this sentiment is the only one hidden, restore all
+                  toggledSentiments.clear();
+                } else {
+                  // Hide all except this sentiment
+                  toggledSentiments = new Set(chart.data.labels.map(l => l.replace(/\s*\(\d+\)$/, '').trim().toLowerCase()).filter(s => s !== sentiment));
+                }
               } else {
-                toggledSentiments.add(sentiment);
+                // Normal single click: toggle this sentiment
+                if (toggledSentiments.has(sentiment)) {
+                  toggledSentiments.delete(sentiment);
+                } else {
+                  toggledSentiments.add(sentiment);
+                }
               }
+              legendClickState.lastClickTime = now;
+              legendClickState.lastClickIndex = index;
 
               // After toggling, update all slices' hidden state based on sentiment key
               const meta = chart.getDatasetMeta(legendItem.datasetIndex);
@@ -19242,6 +19270,7 @@ function updatePieChart(sentimentCounts) {
       slice.hidden = toggledSentiments.has(sliceSentiment);
     });
     pieChart.update();
+    updateBarChart(); // Optionally update bar chart to reflect new window
   }
 }
 function updateTimelineLabels() {
@@ -19542,10 +19571,20 @@ function updateBarChart() {
     tick.style.flex = '1 1 0';
     tick.style.height = '3px';
     tick.style.display = 'flex';
+    tick.style.fontSize = '12px';
     tick.style.alignItems = 'flex-end';
     tick.style.justifyContent = 'flex-end';
     const value = topTick - i * tickInterval;
-    tick.textContent = value;
+    // Format value: 10000 -> 10k, 1500000 -> 1.5M, etc.
+    let formattedValue;
+    if (value >= 1_000_000) {
+      formattedValue = (value / 1_000_000).toFixed(value % 1_000_000 === 0 ? 0 : 1) + 'M';
+    } else if (value >= 1_000) {
+      formattedValue = (value / 1_000).toFixed(value % 1_000 === 0 ? 0 : 1) + 'k';
+    } else {
+      formattedValue = value;
+    }
+    tick.textContent = formattedValue;
     yAxisContainer.appendChild(tick);
   }
   barChartContainer.innerHTML = '';
@@ -19561,7 +19600,9 @@ function updateBarChart() {
     bar.style.display = 'inline-block';
     bar.style.verticalAlign = 'bottom';
     bar.style.margin = '0 0.5px';
-    bar.style.height = `${windowBuckets[i] / windowMax * 100}%`;
+    // Calculate bar height relative to the top tick (not windowMax)
+    const barTop = tickInterval * (yTicks - 1);
+    bar.style.height = `${windowBuckets[i] / barTop * 100}%`;
     bar.style.transition = 'background 0.15s';
     bar.title = `${windowBuckets[i]} Chats`;
     const emojiSpan = document.createElement('span');
@@ -19665,7 +19706,8 @@ function niceTickInterval(maxValue, tickCount) {
   if (maxValue === 0) return 1;
   const rough = maxValue / (tickCount - 1);
   const pow10 = Math.pow(10, Math.floor(Math.log10(rough)));
-  const niceSteps = [1, 2, 5, 10];
+  // Use even finer steps for more precision, especially at low values
+  const niceSteps = [0.01, 0.02, 0.025, 0.05, 0.1, 0.2, 0.25, 0.5, 1, 2, 2.5, 5, 10, 20, 25, 50, 100, 200, 250, 500, 1000, 2000, 2500, 5000, 10000, 20000, 25000, 50000, 100000];
   let bestStep = pow10;
   for (let step of niceSteps) {
     if (pow10 * step >= rough) {
