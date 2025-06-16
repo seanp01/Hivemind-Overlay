@@ -1,69 +1,81 @@
 import Chart from 'chart.js/auto';
 // Sentiment color palette: unique, visually distinct colors for each sentiment
 export const sentimentEmojis = {
-    'positive': '😊',      // #43A047 green
-    'negative': '😠',      // #E53935 red
-    'neutral': '😐',       // #90A4AE gray-blue
-    'mixed': '🤔',         // #1E88E5 blue
-    'happy': '😄',         // #FFD600 bright yellow
-    'sad': '😢',           // #5E35B1 purple
-    'angry': '😡',         // #F4511E orange-red
-    'surprised': '😲',     // #00B8D4 cyan
-    'fear': '😱',          // #8D6E63 brown
-    'sarcastic': '🙃',     // #FFB300 amber
-    'hype': '🚀',          // #00E676 neon green
-    'cringe': '😬',        // #D81B60 magenta
-    'joke': '😂',          // #FDD835 gold
-    'mocking': '😏',       // #6D4C41 dark brown
-    'toxic': '☠️',         // #212121 black
-    'confused': '😕',      // #7E57C2 lavender
-    'copypasta': '📋',     // #FF7043 coral
-    'emote_spam': '💬',    // #29B6F6 sky blue
-    'bait': '🎣',          // #FF8A65 peach
-    'question': '❓',       // #3949AB indigo
-    'command_request': '📝',// #C0CA33 lime
-    'insightful': '💡',    // #00ACC1 teal
-    'meta': '🧠',          // #B2FF59 light green
-    'criticism': '🧐',     // #C62828 dark red
-    'backseat': '🪑',      // #F9A825 yellow-orange
-    'fan_theory': '🧩',    // #8E24AA deep purple
-    'supportive': '🤗',    // #388E3C forest green
-    'personal_story': '📖',// #A1887F taupe
-    'reaction_gif_text': '🎞️', // #F06292 pink
-    'default': '💬'
+  positive: '😊',
+  negative: '😠',
+  neutral: '😐',
+  mixed: '🤔',
+  happy: '😄',
+  sad: '😢',
+  angry: '😡',
+  surprised: '😲',
+  fear: '😱',
+  sarcastic: '🙃',
+  hype: '🚀',
+  cringe: '😬',
+  joke: '😂',
+  mocking: '😏',
+  toxic: '☠️',
+  confused: '😕',
+  copypasta: '📋',
+  emote_spam: '💬',
+  bait: '🎣',
+  question: '❓',
+  command_request: '📝',
+  insightful: '💡',
+  meta: '🧠',
+  criticism: '🧐',
+  backseat: '🪑',
+  fan_theory: '🧩',
+  supportive: '🤗',
+  personal_story: '📖',
+  reaction_gif_text: '🎞️',
+  playful: '🎈',
+  affirmative: '✅',
+  agreeable: '👍',
+  commentary: '🗣️',
+  conversation: '🧵',
+  compliment: '🌟',
+  default: '💬'
 };
 
 export const sentimentColorPalette = {
-    positive:    '#43A047', // green
-    negative:    '#E53935', // red
-    neutral:     '#90A4AE', // gray-blue
-    mixed:       '#1E88E5', // blue
-    happy:       '#FFD600', // bright yellow
-    sad:         '#5E35B1', // purple
-    angry:       '#F4511E', // orange-red
-    surprised:   '#00B8D4', // cyan
-    fear:        '#8D6E63', // brown
-    sarcastic:   '#FFB300', // amber
-    hype:        '#00E676', // neon green
-    cringe:      '#D81B60', // magenta
-    joke:        '#FDD835', // gold
-    mocking:     '#6D4C41', // dark brown
-    toxic:       '#212121', // black
-    confused:    '#7E57C2', // lavender
-    copypasta:   '#FF7043', // coral
-    emote_spam:  '#29B6F6', // sky blue
-    bait:        '#FF8A65', // peach
-    question:    '#3949AB', // indigo
-    command_request: '#C0CA33', // lime
-    insightful:  '#00ACC1', // teal
-    meta:        '#B2FF59', // light green
-    criticism:   '#C62828', // dark red
-    backseat:    '#F9A825', // yellow-orange
-    fan_theory:  '#8E24AA', // deep purple
-    supportive:  '#388E3C', // forest green
-    personal_story: '#A1887F', // taupe
-    reaction_gif_text: '#F06292', // pink
-    default:     '#B0BEC5'  // fallback gray
+  positive: '#43A047',
+  negative: '#E53935',
+  neutral: '#90A4AE',
+  mixed: '#1E88E5',
+  happy: '#FFD600',
+  sad: '#5E35B1',
+  angry: '#F4511E',
+  surprised: '#00B8D4',
+  fear: '#8D6E63',
+  sarcastic: '#FFB300',
+  hype: '#00E676',
+  cringe: '#D81B60',
+  joke: '#FDD835',
+  mocking: '#6D4C41',
+  toxic: '#212121',
+  confused: '#7E57C2',
+  copypasta: '#FF7043',
+  emote_spam: '#29B6F6',
+  bait: '#FF8A65',
+  question: '#3949AB',
+  command_request: '#C0CA33',
+  insightful: '#00ACC1',
+  meta: '#B2FF59',
+  criticism: '#C62828',
+  backseat: '#F9A825',
+  fan_theory: '#8E24AA',
+  supportive: '#388E3C',
+  personal_story: '#A1887F',
+  reaction_gif_text: '#F06292',
+  playful: '#FF6F00',         // bold orange
+  affirmative: '#4CAF50',     // green confirm
+  agreeable: '#81C784',       // soft green
+  commentary: '#7986CB',      // light indigo
+  conversation: '#BA68C8',    // medium purple
+  compliment: '#FFD54F',      // gold yellow
+  default: '#B0BEC5'
 };
 
 /**

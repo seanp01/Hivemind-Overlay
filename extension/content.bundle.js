@@ -18329,45 +18329,59 @@ const sentiment_to_label = {
   // Expresses disappointment, loss, or empathy
   "hype": 7,
   // Excited cheering or support (e.g. "LETS GOOO")
+  "agreeable": 8,
+  // Signals agreement, like "yep", "true", "based"
+  "supportive": 9,
+  // Deeply affirming, emotionally positive
+  "playful": 10,
+  // Silly, teasing, or lighthearted tone
+  "reaction": 11,
+  // General expressive response to events
 
   // 🎭 Expression style / delivery
-  "sarcastic": 8,
+  "sarcasm": 12,
   // Ironic, saying the opposite of what's meant
-  "joke": 9,
+  "joke": 13,
   // Light-hearted humor, not mocking
-  "copypasta": 10,
+  "copypasta": 14,
   // Repeated or meme block text
-  "emote_spam": 11,
+  "emote_spam": 15,
   // Emote-only or excessive emotes
-  "bait": 12,
+  "bait": 16,
   // Provocative to stir a reaction
-  "mocking": 13,
+  "mocking": 17,
   // Ridiculing someone/something
-  "cringe": 14,
+  "cringe": 18,
   // Social embarrassment, second-hand shame
 
   // ❓ Intent or purpose of message
-  "question": 15,
+  "question": 19,
   // Seeking info, asking streamer or chat
-  "command_request": 16,
+  "command_request": 20,
   // Suggesting actions ("play X", "go here")
-  "insightful": 17,
+  "insightful": 21,
   // Adds valuable knowledge or perspective
-  "meta": 18,
+  "meta": 22,
   // Commentary about chat or the stream itself
-  "criticism": 19,
+  "criticism": 23,
   // Disapproval or critique, non-toxic
 
   // 🧩 Add-on specialized classes
-  "backseat": 20,
+  "backseat": 24,
   // Telling the streamer how to play
-  "fan_theory": 21,
+  "fan_theory": 25,
   // Lore speculation or plot guessing
-  "supportive": 22,
-  // Deeply affirming, emotionally positive
-  "personal_story": 23,
+  "personal_story": 26,
   // Sharing personal anecdotes to relate
-  "reaction_gif_text": 24 // Expressive reactions ("*grabs popcorn*", "sheesh")
+  "reaction_gif_text": 27,
+  // Expressive reactions ("*grabs popcorn*", "sheesh")
+
+  // 🧠 Fine-grained interaction labels
+  "commentary": 28,
+  // Observational, running commentary
+  "affirmative": 29,
+  // Confirming message ("true", "yep", etc)
+  "compliment": 30 // Direct praise or flattery
 };
 class LLMService {
   constructor(apiUrl) {
@@ -18536,126 +18550,86 @@ __webpack_require__.r(__webpack_exports__);
 
 // Sentiment color palette: unique, visually distinct colors for each sentiment
 const sentimentEmojis = {
-  'positive': '😊',
-  // #43A047 green
-  'negative': '😠',
-  // #E53935 red
-  'neutral': '😐',
-  // #90A4AE gray-blue
-  'mixed': '🤔',
-  // #1E88E5 blue
-  'happy': '😄',
-  // #FFD600 bright yellow
-  'sad': '😢',
-  // #5E35B1 purple
-  'angry': '😡',
-  // #F4511E orange-red
-  'surprised': '😲',
-  // #00B8D4 cyan
-  'fear': '😱',
-  // #8D6E63 brown
-  'sarcastic': '🙃',
-  // #FFB300 amber
-  'hype': '🚀',
-  // #00E676 neon green
-  'cringe': '😬',
-  // #D81B60 magenta
-  'joke': '😂',
-  // #FDD835 gold
-  'mocking': '😏',
-  // #6D4C41 dark brown
-  'toxic': '☠️',
-  // #212121 black
-  'confused': '😕',
-  // #7E57C2 lavender
-  'copypasta': '📋',
-  // #FF7043 coral
-  'emote_spam': '💬',
-  // #29B6F6 sky blue
-  'bait': '🎣',
-  // #FF8A65 peach
-  'question': '❓',
-  // #3949AB indigo
-  'command_request': '📝',
-  // #C0CA33 lime
-  'insightful': '💡',
-  // #00ACC1 teal
-  'meta': '🧠',
-  // #B2FF59 light green
-  'criticism': '🧐',
-  // #C62828 dark red
-  'backseat': '🪑',
-  // #F9A825 yellow-orange
-  'fan_theory': '🧩',
-  // #8E24AA deep purple
-  'supportive': '🤗',
-  // #388E3C forest green
-  'personal_story': '📖',
-  // #A1887F taupe
-  'reaction_gif_text': '🎞️',
-  // #F06292 pink
-  'default': '💬'
+  positive: '😊',
+  negative: '😠',
+  neutral: '😐',
+  mixed: '🤔',
+  happy: '😄',
+  sad: '😢',
+  angry: '😡',
+  surprised: '😲',
+  fear: '😱',
+  sarcastic: '🙃',
+  hype: '🚀',
+  cringe: '😬',
+  joke: '😂',
+  mocking: '😏',
+  toxic: '☠️',
+  confused: '😕',
+  copypasta: '📋',
+  emote_spam: '💬',
+  bait: '🎣',
+  question: '❓',
+  command_request: '📝',
+  insightful: '💡',
+  meta: '🧠',
+  criticism: '🧐',
+  backseat: '🪑',
+  fan_theory: '🧩',
+  supportive: '🤗',
+  personal_story: '📖',
+  reaction_gif_text: '🎞️',
+  playful: '🎈',
+  affirmative: '✅',
+  agreeable: '👍',
+  commentary: '🗣️',
+  conversation: '🧵',
+  compliment: '🌟',
+  default: '💬'
 };
 const sentimentColorPalette = {
   positive: '#43A047',
-  // green
   negative: '#E53935',
-  // red
   neutral: '#90A4AE',
-  // gray-blue
   mixed: '#1E88E5',
-  // blue
   happy: '#FFD600',
-  // bright yellow
   sad: '#5E35B1',
-  // purple
   angry: '#F4511E',
-  // orange-red
   surprised: '#00B8D4',
-  // cyan
   fear: '#8D6E63',
-  // brown
   sarcastic: '#FFB300',
-  // amber
   hype: '#00E676',
-  // neon green
   cringe: '#D81B60',
-  // magenta
   joke: '#FDD835',
-  // gold
   mocking: '#6D4C41',
-  // dark brown
   toxic: '#212121',
-  // black
   confused: '#7E57C2',
-  // lavender
   copypasta: '#FF7043',
-  // coral
   emote_spam: '#29B6F6',
-  // sky blue
   bait: '#FF8A65',
-  // peach
   question: '#3949AB',
-  // indigo
   command_request: '#C0CA33',
-  // lime
   insightful: '#00ACC1',
-  // teal
   meta: '#B2FF59',
-  // light green
   criticism: '#C62828',
-  // dark red
   backseat: '#F9A825',
-  // yellow-orange
   fan_theory: '#8E24AA',
-  // deep purple
   supportive: '#388E3C',
-  // forest green
   personal_story: '#A1887F',
-  // taupe
   reaction_gif_text: '#F06292',
-  // pink
-  default: '#B0BEC5' // fallback gray
+  playful: '#FF6F00',
+  // bold orange
+  affirmative: '#4CAF50',
+  // green confirm
+  agreeable: '#81C784',
+  // soft green
+  commentary: '#7986CB',
+  // light indigo
+  conversation: '#BA68C8',
+  // medium purple
+  compliment: '#FFD54F',
+  // gold yellow
+  default: '#B0BEC5'
 };
 
 /**

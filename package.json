@@ -30,8 +30,9 @@
     "webpack": "^5.99.9",
     "webpack-cli": "^4.10.0"
   },
-  "version": "1.14.0",
+  "version": "1.15.0",
   "changelog": {
+    "1.15.0": "Refined the training dataset and added new sentiments for more precise analysis. ~ Sean Parker",
     "1.14.0": "Implemented a standard deviation adjuster labeled 'Peak Sensitivity' to control the peaks of interest. ~ Sean Parker",
     "1.13.0": "Added a double and triple click detection for chart label toggle all and reset. The message volume y axis is now dynamic and more accurate. ~ Sean Parker",
     "1.12.0": "Updated emoji sentiments to support tooltips, and implemented more dynamic sizing for the sentiment charts. ~ Sean Parker",
