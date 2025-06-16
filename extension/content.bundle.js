@@ -18314,74 +18314,86 @@ const LMPORT = 5222 || 0;
 const sentiment_to_label = {
   // 🟢 Tone-based sentiments
   "neutral": 0,
-  // No strong sentiment
+  // 😐 No strong sentiment
   "positive": 1,
-  // Kind, optimistic, supportive
+  // 😊 Kind, optimistic, supportive
   "negative": 2,
-  // Disapproving, pessimistic
+  // 😠 Disapproving, pessimistic
   "toxic": 3,
-  // Aggressive, rude, inflammatory
+  // ☠️ Aggressive, rude, inflammatory
   "confused": 4,
-  // Expresses confusion or lack of understanding
+  // 😕 Expresses confusion or lack of understanding
   "angry": 5,
-  // Expresses frustration or anger
+  // 😡 Expresses frustration or anger
   "sad": 6,
-  // Expresses disappointment, loss, or empathy
+  // 😢 Expresses disappointment, loss, or empathy
   "hype": 7,
-  // Excited cheering or support (e.g. "LETS GOOO")
+  // 🚀 Excited cheering or support (e.g. "LETS GOOO")
   "agreeable": 8,
-  // Signals agreement, like "yep", "true", "based"
+  // 👍 Signals agreement, like "yep", "true", "based"
   "supportive": 9,
-  // Deeply affirming, emotionally positive
+  // 🤗 Deeply affirming, emotionally positive
   "playful": 10,
-  // Silly, teasing, or lighthearted tone
+  // 🎈 Silly, teasing, or lighthearted tone
   "reaction": 11,
-  // General expressive response to events
+  // 🧵 General expressive response to events
 
   // 🎭 Expression style / delivery
   "sarcasm": 12,
-  // Ironic, saying the opposite of what's meant
-  "joke": 13,
-  // Light-hearted humor, not mocking
+  // 🙃 Ironic, saying the opposite of what's meant
+  "humor": 13,
+  // 😂 Light-hearted humor, not mocking
   "copypasta": 14,
-  // Repeated or meme block text
+  // 📋 Repeated or meme block text
   "emote_spam": 15,
-  // Emote-only or excessive emotes
+  // 💬 Emote-only or excessive emotes
   "bait": 16,
-  // Provocative to stir a reaction
+  // 🎣 Provocative to stir a reaction
   "mocking": 17,
-  // Ridiculing someone/something
+  // 😏 Ridiculing someone/something
   "cringe": 18,
-  // Social embarrassment, second-hand shame
+  // 😬 Social embarrassment, second-hand shame
 
   // ❓ Intent or purpose of message
   "question": 19,
-  // Seeking info, asking streamer or chat
+  // ❓ Seeking info, asking streamer or chat
   "command_request": 20,
-  // Suggesting actions ("play X", "go here")
+  // 📝 Suggesting actions ("play X", "go here")
   "insightful": 21,
-  // Adds valuable knowledge or perspective
+  // 💡 Adds valuable knowledge or perspective
   "meta": 22,
-  // Commentary about chat or the stream itself
+  // 🧠 Commentary about chat or the stream itself
   "criticism": 23,
-  // Disapproval or critique, non-toxic
+  // 🧐 Disapproval or critique, non-toxic
 
   // 🧩 Add-on specialized classes
   "backseat": 24,
-  // Telling the streamer how to play
+  // 🪑 Telling the streamer how to play
   "fan_theory": 25,
-  // Lore speculation or plot guessing
+  // 🧩 Lore speculation or plot guessing
   "personal_story": 26,
-  // Sharing personal anecdotes to relate
-  "reaction_gif_text": 27,
-  // Expressive reactions ("*grabs popcorn*", "sheesh")
+  // 📖 Sharing personal anecdotes to relate
 
   // 🧠 Fine-grained interaction labels
-  "commentary": 28,
-  // Observational, running commentary
-  "affirmative": 29,
-  // Confirming message ("true", "yep", etc)
-  "compliment": 30 // Direct praise or flattery
+  "commentary": 27,
+  // 🗣️ Observational, running commentary
+  "affirmative": 28,
+  // ✅ Confirming message ("true", "yep", etc)
+  "compliment": 29,
+  // 🌟 Direct praise or flattery
+
+  // Additional mappings
+  "mixed": 30,
+  // 🤔 Mixed sentiment
+  "happy": 31,
+  // 😄 Happy
+  "surprised": 32,
+  // 😲 Surprised
+  "fear": 33,
+  // 😱 Fear
+  "conversation": 34,
+  // 🧵 Conversation
+  "default": 35 // 💬 Default/unspecified
 };
 class LLMService {
   constructor(apiUrl) {
@@ -18548,27 +18560,26 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony import */ var chart_js_auto__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! chart.js/auto */ "./node_modules/chart.js/auto/auto.js");
 /* harmony import */ var _src_chatClient_index_js__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! ../src/chatClient/index.js */ "./src/chatClient/index.js");
 
-// Sentiment color palette: unique, visually distinct colors for each sentiment
 const sentimentEmojis = {
   positive: '😊',
   negative: '😠',
   neutral: '😐',
-  mixed: '🤔',
-  happy: '😄',
-  sad: '😢',
-  angry: '😡',
-  surprised: '😲',
-  fear: '😱',
-  sarcastic: '🙃',
-  hype: '🚀',
-  cringe: '😬',
-  joke: '😂',
-  mocking: '😏',
   toxic: '☠️',
   confused: '😕',
+  angry: '😡',
+  sad: '😢',
+  hype: '🚀',
+  agreeable: '👍',
+  supportive: '🤗',
+  playful: '🎈',
+  reaction: '🧵',
+  sarcasm: '🙃',
+  humor: '😂',
   copypasta: '📋',
   emote_spam: '💬',
   bait: '🎣',
+  mocking: '😏',
+  cringe: '😬',
   question: '❓',
   command_request: '📝',
   insightful: '💡',
@@ -18576,37 +18587,39 @@ const sentimentEmojis = {
   criticism: '🧐',
   backseat: '🪑',
   fan_theory: '🧩',
-  supportive: '🤗',
   personal_story: '📖',
-  reaction_gif_text: '🎞️',
-  playful: '🎈',
-  affirmative: '✅',
-  agreeable: '👍',
   commentary: '🗣️',
-  conversation: '🧵',
+  affirmative: '✅',
   compliment: '🌟',
+  mixed: '🤔',
+  happy: '😄',
+  surprised: '😲',
+  fear: '😱',
+  conversation: '🧵',
   default: '💬'
 };
+
+// Sentiment color palette: unique, visually distinct colors for each sentiment
 const sentimentColorPalette = {
   positive: '#43A047',
   negative: '#E53935',
   neutral: '#90A4AE',
-  mixed: '#1E88E5',
-  happy: '#FFD600',
-  sad: '#5E35B1',
-  angry: '#F4511E',
-  surprised: '#00B8D4',
-  fear: '#8D6E63',
-  sarcastic: '#FFB300',
-  hype: '#00E676',
-  cringe: '#D81B60',
-  joke: '#FDD835',
-  mocking: '#6D4C41',
   toxic: '#212121',
   confused: '#7E57C2',
+  angry: '#F4511E',
+  sad: '#5E35B1',
+  hype: '#00E676',
+  agreeable: '#81C784',
+  supportive: '#388E3C',
+  playful: '#FF6F00',
+  reaction: '#00BFAE',
+  sarcasm: '#FFB300',
+  humor: '#FDD835',
   copypasta: '#FF7043',
   emote_spam: '#29B6F6',
   bait: '#FF8A65',
+  mocking: '#6D4C41',
+  cringe: '#D81B60',
   question: '#3949AB',
   command_request: '#C0CA33',
   insightful: '#00ACC1',
@@ -18614,21 +18627,15 @@ const sentimentColorPalette = {
   criticism: '#C62828',
   backseat: '#F9A825',
   fan_theory: '#8E24AA',
-  supportive: '#388E3C',
   personal_story: '#A1887F',
-  reaction_gif_text: '#F06292',
-  playful: '#FF6F00',
-  // bold orange
-  affirmative: '#4CAF50',
-  // green confirm
-  agreeable: '#81C784',
-  // soft green
   commentary: '#7986CB',
-  // light indigo
-  conversation: '#BA68C8',
-  // medium purple
+  affirmative: '#4CAF50',
   compliment: '#FFD54F',
-  // gold yellow
+  mixed: '#1E88E5',
+  happy: '#FFD600',
+  surprised: '#00B8D4',
+  fear: '#8D6E63',
+  conversation: '#BA68C8',
   default: '#B0BEC5'
 };
 
@@ -19487,6 +19494,7 @@ const addMessageToOverlay = message => {
 };
 function renderMessageElement(message) {
   // Alternate user colors
+
   const userColors = ['#4FC3F7', '#FFB74D', '#81C784', '#BA68C8', '#FFD54F', '#E57373', '#64B5F6', '#A1887F', '#90A4AE', '#F06292', '#AED581', '#FFF176', '#9575CD', '#4DB6AC', '#FF8A65', '#DCE775', '#7986CB', '#B0BEC5', '#F44336', '#00BCD4'];
   if (!renderMessageElement.userColorMap) renderMessageElement.userColorMap = {};
   let userColor = userColors[0];
@@ -19513,7 +19521,7 @@ function renderMessageElement(message) {
   rightContainer.style.display = 'flex';
   rightContainer.style.gap = '4px';
   if (Array.isArray(message.predictions) && message.predictions.length > 0) {
-    message.predictions.slice(0, 3).filter(sentiment => sentiment.score * 100 >= 1).forEach(sentiment => {
+    message.predictions.slice(0, 3).filter(sentiment => sentiment.score * 100 >= 10).forEach(sentiment => {
       const badge = document.createElement('span');
       badge.textContent = sentiment.sentiment;
       badge.style.display = 'inline-block';
@@ -19656,21 +19664,31 @@ function updateBarChart() {
       }
     }
     if (windowBuckets[i] > peakThreshold && bucketMessages[i].length > 0) {
-      // Aggregate sentiments
+      // Ranked choice aggregation using scores
+      const sentimentScores = {};
       const sentimentCounts = {};
+      // For each message, treat predictions as ranked choices (ranked by score)
       bucketMessages[i].forEach(msg => {
         if (Array.isArray(msg.predictions)) {
-          msg.predictions.forEach(pred => {
-            sentimentCounts[pred.sentiment] = (sentimentCounts[pred.sentiment] || 0) + 1;
+          // Sort predictions by score descending (just in case)
+          const preds = [...msg.predictions].sort((a, b) => b.score - a.score);
+          // Assign points: 1st = 3, 2nd = 2, 3rd = 1 (Borda count style)
+          preds.forEach((pred, idx) => {
+            const sentiment = pred.sentiment;
+            const points = 3 - idx; // 3, 2, 1
+            if (points > 0) {
+              sentimentScores[sentiment] = (sentimentScores[sentiment] || 0) + points * pred.score;
+              sentimentCounts[sentiment] = (sentimentCounts[sentiment] || 0) + 1;
+            }
           });
         }
       });
       // Find top sentiment not in toggledSentiments
-      const sortedSentiments = Object.entries(sentimentCounts).sort((a, b) => b[1] - a[1]);
+      const sortedSentiments = Object.entries(sentimentScores).sort((a, b) => b[1] - a[1]);
       let topSentiment = null;
       for (const [sentiment] of sortedSentiments) {
         if (!(toggledSentiments && toggledSentiments.has(sentiment))) {
-          topSentiment = [sentiment, sentimentCounts[sentiment]];
+          topSentiment = [sentiment, sentimentScores[sentiment]];
           break;
         }
       }

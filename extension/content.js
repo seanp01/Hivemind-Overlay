@@ -1,81 +1,82 @@
 import Chart from 'chart.js/auto';
-// Sentiment color palette: unique, visually distinct colors for each sentiment
+
 export const sentimentEmojis = {
-  positive: '😊',
-  negative: '😠',
-  neutral: '😐',
-  mixed: '🤔',
-  happy: '😄',
-  sad: '😢',
-  angry: '😡',
-  surprised: '😲',
-  fear: '😱',
-  sarcastic: '🙃',
-  hype: '🚀',
-  cringe: '😬',
-  joke: '😂',
-  mocking: '😏',
-  toxic: '☠️',
-  confused: '😕',
-  copypasta: '📋',
-  emote_spam: '💬',
-  bait: '🎣',
-  question: '❓',
-  command_request: '📝',
-  insightful: '💡',
-  meta: '🧠',
-  criticism: '🧐',
-  backseat: '🪑',
-  fan_theory: '🧩',
-  supportive: '🤗',
-  personal_story: '📖',
-  reaction_gif_text: '🎞️',
-  playful: '🎈',
-  affirmative: '✅',
-  agreeable: '👍',
-  commentary: '🗣️',
-  conversation: '🧵',
-  compliment: '🌟',
-  default: '💬'
+    positive: '😊',
+    negative: '😠',
+    neutral: '😐',
+    toxic: '☠️',
+    confused: '😕',
+    angry: '😡',
+    sad: '😢',
+    hype: '🚀',
+    agreeable: '👍',
+    supportive: '🤗',
+    playful: '🎈',
+    reaction: '🧵',
+    sarcasm: '🙃',
+    humor: '😂',
+    copypasta: '📋',
+    emote_spam: '💬',
+    bait: '🎣',
+    mocking: '😏',
+    cringe: '😬',
+    question: '❓',
+    command_request: '📝',
+    insightful: '💡',
+    meta: '🧠',
+    criticism: '🧐',
+    backseat: '🪑',
+    fan_theory: '🧩',
+    personal_story: '📖',
+    commentary: '🗣️',
+    affirmative: '✅',
+    compliment: '🌟',
+    mixed: '🤔',
+    happy: '😄',
+    surprised: '😲',
+    fear: '😱',
+    conversation: '🧵',
+    default: '💬'
 };
 
+// Sentiment color palette: unique, visually distinct colors for each sentiment
 export const sentimentColorPalette = {
-  positive: '#43A047',
-  negative: '#E53935',
-  neutral: '#90A4AE',
-  mixed: '#1E88E5',
-  happy: '#FFD600',
-  sad: '#5E35B1',
-  angry: '#F4511E',
-  surprised: '#00B8D4',
-  fear: '#8D6E63',
-  sarcastic: '#FFB300',
-  hype: '#00E676',
-  cringe: '#D81B60',
-  joke: '#FDD835',
-  mocking: '#6D4C41',
-  toxic: '#212121',
-  confused: '#7E57C2',
-  copypasta: '#FF7043',
-  emote_spam: '#29B6F6',
-  bait: '#FF8A65',
-  question: '#3949AB',
-  command_request: '#C0CA33',
-  insightful: '#00ACC1',
-  meta: '#B2FF59',
-  criticism: '#C62828',
-  backseat: '#F9A825',
-  fan_theory: '#8E24AA',
-  supportive: '#388E3C',
-  personal_story: '#A1887F',
-  reaction_gif_text: '#F06292',
-  playful: '#FF6F00',         // bold orange
-  affirmative: '#4CAF50',     // green confirm
-  agreeable: '#81C784',       // soft green
-  commentary: '#7986CB',      // light indigo
-  conversation: '#BA68C8',    // medium purple
-  compliment: '#FFD54F',      // gold yellow
-  default: '#B0BEC5'
+    positive: '#43A047',
+    negative: '#E53935',
+    neutral: '#90A4AE',
+    toxic: '#212121',
+    confused: '#7E57C2',
+    angry: '#F4511E',
+    sad: '#5E35B1',
+    hype: '#00E676',
+    agreeable: '#81C784',
+    supportive: '#388E3C',
+    playful: '#FF6F00',
+    reaction: '#00BFAE',
+    sarcasm: '#FFB300',
+    humor: '#FDD835',
+    copypasta: '#FF7043',
+    emote_spam: '#29B6F6',
+    bait: '#FF8A65',
+    mocking: '#6D4C41',
+    cringe: '#D81B60',
+    question: '#3949AB',
+    command_request: '#C0CA33',
+    insightful: '#00ACC1',
+    meta: '#B2FF59',
+    criticism: '#C62828',
+    backseat: '#F9A825',
+    fan_theory: '#8E24AA',
+    personal_story: '#A1887F',
+    commentary: '#7986CB',
+    affirmative: '#4CAF50',
+    compliment: '#FFD54F',
+    mixed: '#1E88E5',
+    happy: '#FFD600',
+    surprised: '#00B8D4',
+    fear: '#8D6E63',
+    conversation: '#BA68C8',
+    default: '#B0BEC5'
 };
 
 /**
@@ -954,6 +955,7 @@ const addMessageToOverlay = (message) => {
 
 function renderMessageElement(message) {
     // Alternate user colors
+    
     const userColors = [
         '#4FC3F7', '#FFB74D', '#81C784', '#BA68C8', '#FFD54F',
         '#E57373', '#64B5F6', '#A1887F', '#90A4AE', '#F06292',
@@ -988,7 +990,7 @@ function renderMessageElement(message) {
     if (Array.isArray(message.predictions) && message.predictions.length > 0) {
         message.predictions
             .slice(0, 3)
-            .filter(sentiment => sentiment.score * 100 >= 1)
+            .filter(sentiment => sentiment.score * 100 >= 10)
             .forEach(sentiment => {
                 const badge = document.createElement('span');
                 badge.textContent = sentiment.sentiment;
@@ -1140,22 +1142,32 @@ function updateBarChart() {
         }
 
         if (windowBuckets[i] > peakThreshold && bucketMessages[i].length > 0) {
-            // Aggregate sentiments
+            // Ranked choice aggregation using scores
+            const sentimentScores = {};
             const sentimentCounts = {};
+            // For each message, treat predictions as ranked choices (ranked by score)
             bucketMessages[i].forEach(msg => {
-                if (Array.isArray(msg.predictions)) {
-                    msg.predictions.forEach(pred => {
-                        sentimentCounts[pred.sentiment] = (sentimentCounts[pred.sentiment] || 0) + 1;
-                    });
-                }
+            if (Array.isArray(msg.predictions)) {
+                // Sort predictions by score descending (just in case)
+                const preds = [...msg.predictions].sort((a, b) => b.score - a.score);
+                // Assign points: 1st = 3, 2nd = 2, 3rd = 1 (Borda count style)
+                preds.forEach((pred, idx) => {
+                    const sentiment = pred.sentiment;
+                    const points = 3 - idx; // 3, 2, 1
+                    if (points > 0) {
+                        sentimentScores[sentiment] = (sentimentScores[sentiment] || 0) + points * pred.score;
+                        sentimentCounts[sentiment] = (sentimentCounts[sentiment] || 0) + 1;
+                    }
+                });
+            }
             });
             // Find top sentiment not in toggledSentiments
-            const sortedSentiments = Object.entries(sentimentCounts)
+            const sortedSentiments = Object.entries(sentimentScores)
                 .sort((a, b) => b[1] - a[1]);
             let topSentiment = null;
             for (const [sentiment] of sortedSentiments) {
                 if (!(toggledSentiments && toggledSentiments.has(sentiment))) {
-                    topSentiment = [sentiment, sentimentCounts[sentiment]];
+                    topSentiment = [sentiment, sentimentScores[sentiment]];
                     break;
                 }
             }
