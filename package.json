@@ -30,8 +30,9 @@
     "webpack": "^5.99.9",
     "webpack-cli": "^4.10.0"
   },
-  "version": "1.17.0",
+  "version": "1.18.0",
   "changelog": {
+    "1.18.0": "Minor adjustments to the sentiment emoji set. ~ Sean Parker",
     "1.17.0": "Bug fix for supporting emojis in the pie chart label names. ~ Sean Parker",
     "1.16.0": "Added Borda count voting for more accurate multi-sentiment analysis. ~ Sean Parker",
     "1.15.0": "Refined the training dataset and added new sentiments for more precise analysis. ~ Sean Parker",
