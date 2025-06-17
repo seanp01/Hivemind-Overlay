@@ -19180,7 +19180,10 @@ let pieChart;
 function updatePieChart(sentimentCounts) {
   // Sort sentimentCounts by count descending
   const sortedEntries = Object.entries(sentimentCounts).sort((a, b) => b[1] - a[1]);
-  const labels = sortedEntries.map(([sentiment, count]) => `${sentiment} (${count})`);
+  const labels = sortedEntries.map(([sentiment, count]) => {
+    const emoji = sentimentEmojis[sentiment] || sentimentEmojis.default;
+    return `${emoji} ${sentiment} (${count})`;
+  });
   const data = sortedEntries.map(([, count]) => count);
   const sentiments = sortedEntries.map(([sentiment]) => sentiment);
   const backgroundColors = sentiments.map(sentiment => sentimentColorPalette[sentiment.trim().toLowerCase()] || sentimentColorPalette.default);
@@ -19231,7 +19234,9 @@ function updatePieChart(sentimentCounts) {
               const DOUBLE_CLICK_MS = 500;
               const chart = legend.chart;
               const index = legendItem.index;
-              const sentiment = chart.data.labels[index].replace(/\s*\(\d+\)$/, '').trim().toLowerCase();
+              const sentiment = chart.data.labels[index].replace(/^[^\w]+/, '') // Remove leading emoji and spaces
+              .replace(/\s*\(\d+\)$/, '') // Remove trailing (count)
+              .trim().toLowerCase();
               if (legendClickState.lastClickIndex === index && now - legendClickState.lastClickTime < DOUBLE_CLICK_MS) {
                 // If only this sentiment is visible (all others hidden), restore all
                 if (toggledSentiments.size === chart.data.labels.length - 1 && !toggledSentiments.has(sentiment)) {
@@ -19257,7 +19262,9 @@ function updatePieChart(sentimentCounts) {
               // After toggling, update all slices' hidden state based on sentiment key
               const meta = chart.getDatasetMeta(legendItem.datasetIndex);
               meta.data.forEach((slice, i) => {
-                const sliceSentiment = chart.data.labels[i].replace(/\s*\(\d+\)$/, '').trim().toLowerCase();
+                const sliceSentiment = pieChart.data.labels[i].replace(/^[^\w]+/, '') // Remove leading emoji and spaces
+                .replace(/\s*\(\d+\)$/, '') // Remove trailing (count)
+                .trim().toLowerCase();
                 slice.hidden = toggledSentiments.has(sliceSentiment);
               });
               chart.update();
@@ -19288,7 +19295,10 @@ function updatePieChart(sentimentCounts) {
       if (pieChart.data.labels[i] === undefined) {
         return;
       }
-      const sliceSentiment = pieChart.data.labels[i].replace(/\s*\(\d+\)$/, '').trim().toLowerCase();
+      // Remove emoji and (#) from the label to get the sentiment key
+      const sliceSentiment = pieChart.data.labels[i].replace(/^[^\w]+/, '') // Remove leading emoji and spaces
+      .replace(/\s*\(\d+\)$/, '') // Remove trailing (count)
+      .trim().toLowerCase();
       slice.hidden = toggledSentiments.has(sliceSentiment);
     });
     pieChart.update();
@@ -19683,18 +19693,16 @@ function updateBarChart() {
           });
         }
       });
-      // Find top sentiment not in toggledSentiments
-      const sortedSentiments = Object.entries(sentimentScores).sort((a, b) => b[1] - a[1]);
-      let topSentiment = null;
-      for (const [sentiment] of sortedSentiments) {
-        if (!(toggledSentiments && toggledSentiments.has(sentiment))) {
-          topSentiment = [sentiment, sentimentScores[sentiment]];
-          break;
-        }
-      }
+      const sortedSentiments = Object.entries(sentimentScores).sort((a, b) => b[1] - a[1]).map(([sentiment]) => sentiment);
+
+      // Find the first sentiment not toggled off
+      const topSentiment = sortedSentiments.find(s => !toggledSentiments.has(s));
       if (topSentiment) {
-        emojiSpan.textContent = sentimentEmojis[topSentiment[0]] || sentimentEmojis.default;
-        emojiSpan.title = topSentiment[0] || 'Sentiment';
+        emojiSpan.textContent = sentimentEmojis[topSentiment] || sentimentEmojis.default;
+        emojiSpan.title = topSentiment;
+      } else {
+        emojiSpan.textContent = sentimentEmojis.default;
+        emojiSpan.title = "No sentiment";
       }
     }
     barChartEmojiRow.appendChild(emojiSpan);
