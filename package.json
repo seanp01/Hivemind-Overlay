@@ -30,8 +30,9 @@
     "webpack": "^5.99.9",
     "webpack-cli": "^4.10.0"
   },
-  "version": "1.19.0",
+  "version": "1.20.0",
   "changelog": {
+    "1.20.0": "Implemented manual chat labeling to reduce load on the LM service by upgrading the chatClient to detect specific chat message cases. ~ Sean Parker",
     "1.19.0": "Added new sentiment labels and updated emoji mappings. ~ Sean Parker",
     "1.18.0": "Minor adjustments to the sentiment emoji set. ~ Sean Parker",
     "1.17.0": "Bug fix for supporting emojis in the pie chart label names. ~ Sean Parker",
