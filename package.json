@@ -30,8 +30,9 @@
     "webpack": "^5.99.9",
     "webpack-cli": "^4.10.0"
   },
-  "version": "1.20.0",
+  "version": "1.21.0",
   "changelog": {
+    "1.21.0": "Scaffolding and initial implementation of summaryClient to communicate chat message window sentiments to the summary contextualizing LM. ~ Sean Parker",
     "1.20.0": "Implemented manual chat labeling to reduce load on the LM service by upgrading the chatClient to detect specific chat message cases. ~ Sean Parker",
     "1.19.0": "Added new sentiment labels and updated emoji mappings. ~ Sean Parker",
     "1.18.0": "Minor adjustments to the sentiment emoji set. ~ Sean Parker",

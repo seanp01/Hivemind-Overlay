@@ -1,4 +1,6 @@
 import Chart from 'chart.js/auto';
+import ChatClient from '../src/chatClient/index.js';
+import SummaryClient from '../src/summaryClient/index.js';
 
 export const sentimentEmojis = {
     positive: '😊',
@@ -142,8 +144,6 @@ stddevControlContainer.appendChild(stddevLabel);
 stddevControlContainer.appendChild(stddevInput);
 stddevControlContainer.appendChild(stddevValue);
 
-// Insert before popout/minimize/expand buttons, after timeFrameRadios
-
 const popoutButton = document.createElement('button');
 popoutButton.textContent = '⧉';
 popoutButton.title = 'Pop out overlay';
@@ -264,10 +264,12 @@ expandButton.style.top = '10px';
 expandButton.style.right = '10px';
 expandButton.style.zIndex = '10002';
 expandButton.style.display = 'none';
+
 // Move button creation here so they're not appended directly to overlayContainer
 buttonBar.appendChild(stddevControlContainer);
 buttonBar.appendChild(popoutButton);
 buttonBar.appendChild(minimizeButton);
+
 // This file injects overlay/UI elements into Twitch and YouTube pages, allowing real-time monitoring and interaction with live chats.
 // Only create the overlay if it doesn't already exist
 let overlayContainer = document.getElementById('hivemind-overlay');
@@ -310,7 +312,6 @@ const movementArrowList = document.createElement('ol');
 movementArrowList.id = 'sentiment-ranking';
 movementArrowList.style.margin = '0';
 movementArrowList.style.listStyle = 'decimal';
-// Ensure sentimentSummaryContainer is always inside overlayContainer
 
 popoutButton.addEventListener('click', () => {
     const popout = window.open(
@@ -340,15 +341,19 @@ popoutButton.addEventListener('click', () => {
     };
     popout.onload = transferOverlay;
 });
+
 minimizeButton.addEventListener('click', () => {
     overlayContainer.style.display = 'none';
     expandButton.style.display = 'block';
 });
+
 expandButton.addEventListener('click', () => {
     overlayContainer.style.display = 'block';
     expandButton.style.display = 'none';
 });
+
 overlayContainer.appendChild(sentimentSummaryContainer);
+
 // --- Chat Volume Slider & Bar Chart ---
 
 // Container for slider and bar chart
@@ -496,27 +501,11 @@ sliderBarContainer.appendChild(timelineContainer);
 const chatBuffer = [];
 const MAX_BUFFER_SECONDS = timeFrames[timeFrames.length - 1].value; // 24h (86400 seconds)
 let windowMessages = [];
-function bufferMessage(message) {
-    chatBuffer.push({ ...message, ts: Date.now() });
-    // Remove old messages
-    const cutoff = Date.now() - MAX_BUFFER_SECONDS * 1000;
-    while (chatBuffer.length && chatBuffer[0].ts < cutoff) {
-        chatBuffer.shift();
-    }
-}
-/**
- * Adjust the timeSlider so that its range always matches the selectedTimeFrame.
- * The slider's left (0) is the oldest point in the buffer that still covers the selectedTimeFrame,
- * and right (99) is "now".
- * When the time frame changes, reset the slider to "now".
- */
-function adjustTimeSliderForTimeFrame() {
-    // Always keep slider at "now" when time frame changes
-    timeSlider.value = 99;
-}
+
 timeFrameRadios.querySelectorAll('input[type=radio]').forEach(radio => {
     radio.addEventListener('change', adjustTimeSliderForTimeFrame);
 });
+
 timeSlider.addEventListener('input', () => {
     chatPaused = true; // Pause chat updates while adjusting slider
     // Show overlay button if chat is paused
@@ -617,299 +606,6 @@ timeSlider.addEventListener('input', () => {
 
 updateTimelineLabels();
 
-// --- Chart.js Pie Chart Setup (make sure Chart.js is loaded in your extension) ---
-let toggledSentiments = new Set();
-let pieChart;
-function updatePieChart(sentimentCounts) {
-    // Sort sentimentCounts by count descending
-    const sortedEntries = Object.entries(sentimentCounts).sort((a, b) => b[1] - a[1]);
-    const labels = sortedEntries.map(([sentiment, count]) => {
-        const emoji = sentimentEmojis[sentiment] || sentimentEmojis.default;
-        return `${emoji} ${sentiment} (${count})`;
-    });
-    const data = sortedEntries.map(([, count]) => count);
-    const sentiments = sortedEntries.map(([sentiment, ]) => sentiment);
-    const backgroundColors = sentiments.map(sentiment =>
-        sentimentColorPalette[sentiment.trim().toLowerCase()] || sentimentColorPalette.default
-    );    
-    if (!pieChart) {
-        const ctx = pieCanvas.getContext('2d');
-        pieChart = new Chart(ctx, {
-            type: 'pie',
-            data: {
-                labels: labels, // Slice labels
-                datasets: [{
-                    data: data,
-                    backgroundColor: backgroundColors,
-                }]
-            },
-            options: {
-                responsive: false,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: {
-                        display: true,
-                        position: 'right',
-                        labels: {
-                            generateLabels: function(chart) {
-                                const data = chart.data;
-                                if (data.labels.length && data.datasets.length) {
-                                    return data.labels.map((label, i) => ({
-                                        text: label,
-                                        fontColor: '#fff',
-                                        color: '#fff',
-                                        fillStyle: data.datasets[0].backgroundColor[i],
-                                        hidden: chart.getDatasetMeta(0).data[i].hidden,
-                                        index: i,
-                                        datasetIndex: 0 // Important for onClick!
-                                    }));
-                                }
-                                return [];
-                            }
-                        },
-                        onClick: function(e, legendItem, legend) {
-                            // Double-click detection
-                            // If double-clicked on the same legend item within threshold, toggle ONLY this sentiment,
-                            // or if already only this sentiment is visible, restore all (undo)
-                            
-                            if (!legendClickState.lastClickTime) legendClickState.lastClickTime = 0;
-                            if (legendClickState.lastClickIndex === undefined || legendClickState.lastClickIndex === null) legendClickState.lastClickIndex = -1;
-                            const now = Date.now();
-                            const DOUBLE_CLICK_MS = 500;
-                            const chart = legend.chart;
-                            const index = legendItem.index;
-                            const sentiment = chart.data.labels[index]
-                                .replace(/^[^\w]+/, '') // Remove leading emoji and spaces
-                                .replace(/\s*\(\d+\)$/, '') // Remove trailing (count)
-                                .trim()
-                                .toLowerCase();
-                            if (
-                                legendClickState.lastClickIndex === index &&
-                                now - legendClickState.lastClickTime < DOUBLE_CLICK_MS
-                            ) {
-                                // If only this sentiment is visible (all others hidden), restore all
-                                if (
-                                    toggledSentiments.size === chart.data.labels.length - 1 &&
-                                    !toggledSentiments.has(sentiment)
-                                ) {
-                                    toggledSentiments.clear();
-                                } else if (
-                                    toggledSentiments.size === chart.data.labels.length - 1 &&
-                                    toggledSentiments.has(sentiment)
-                                ) {
-                                    // If this sentiment is the only one hidden, restore all
-                                    toggledSentiments.clear();
-                                } else {
-                                    // Hide all except this sentiment
-                                    toggledSentiments = new Set(
-                                        chart.data.labels
-                                            .map(l => l.replace(/\s*\(\d+\)$/, '').trim().toLowerCase())
-                                            .filter(s => s !== sentiment)
-                                    );
-                                }
-                            } else {
-                                // Normal single click: toggle this sentiment
-                                if (toggledSentiments.has(sentiment)) {
-                                    toggledSentiments.delete(sentiment);
-                                } else {
-                                    toggledSentiments.add(sentiment);
-                                }
-                            }
-
-                            legendClickState.lastClickTime = now;
-                            legendClickState.lastClickIndex = index;
-
-                            // After toggling, update all slices' hidden state based on sentiment key
-                            const meta = chart.getDatasetMeta(legendItem.datasetIndex);
-                            meta.data.forEach((slice, i) => {
-                                const sliceSentiment = pieChart.data.labels[i]
-                                    .replace(/^[^\w]+/, '') // Remove leading emoji and spaces
-                                    .replace(/\s*\(\d+\)$/, '') // Remove trailing (count)
-                                    .trim()
-                                    .toLowerCase();
-                                slice.hidden = toggledSentiments.has(sliceSentiment);
-                            });
-
-                            chart.update();
-                            const messagesContainer = document.getElementById('hivemind-messages');
-                            if (messagesContainer) {
-                                messagesContainer.innerHTML = '';
-                                windowMessages.forEach(msg => {
-                                    if (msg.predictions.some(pred => toggledSentiments.has(pred.sentiment))) return;
-                                    // Use the helper function to render the message element without side effects
-                                    const messageElement = renderMessageElement(msg);
-                                    messagesContainer.appendChild(messageElement);
-                                });
-                            }
-                            updateBarChart(); // Update bar chart to reflect new sentiment visibility
-                        }
-                    }
-                }
-            }
-        });
-    } else {
-        pieChart.data.labels = labels;
-        pieChart.data.datasets[0].data = data;
-        pieChart.data.datasets[0].backgroundColor = backgroundColors;
-
-        // After updating data, re-apply hidden state to slices
-        const meta = pieChart.getDatasetMeta(0);
-        meta.data.forEach((slice, i) => {
-            if (pieChart.data.labels[i] === undefined) {
-            return;
-            }
-            // Remove emoji and (#) from the label to get the sentiment key
-            const sliceSentiment = pieChart.data.labels[i]
-                .replace(/^[^\w]+/, '') // Remove leading emoji and spaces
-                .replace(/\s*\(\d+\)$/, '') // Remove trailing (count)
-                .trim()
-                .toLowerCase();
-            slice.hidden = toggledSentiments.has(sliceSentiment);
-        });
-
-        pieChart.update();
-        updateBarChart(); // Optionally update bar chart to reflect new window
-    }
-}
-
-function updateTimelineLabels() {
-    timelineContainer.innerHTML = '';
-    const tickCount = 8; // Match your sliderTicks
-    const value = parseInt(timeSlider.value, 10);
-    const bufferStart = chatBuffer.length ? chatBuffer[0].ts : Date.now();
-    const bufferEnd = chatBuffer.length ? chatBuffer[chatBuffer.length - 1].ts : Date.now();
-    const bufferDuration = bufferEnd - bufferStart;
-    const sliderFraction = value / 99;
-    const windowEnd = bufferStart + sliderFraction * bufferDuration;
-    const windowStart = windowEnd - selectedTimeFrame * 1000;
-
-    const interval = selectedTimeFrame / (tickCount - 1);
-
-    for (let i = 0; i < tickCount; i++) {
-        const tick = document.createElement('span');
-        tick.style.flex = '1 1 0';
-        tick.style.textAlign = 'center';
-        // Calculate timestamp for this tick
-        let secondsAgo = selectedTimeFrame - i * interval;
-        let ts = windowEnd - secondsAgo * 1000;
-        const date = new Date(ts);
-        // Format as HH:MM:SS or HH:MM
-        let label = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: selectedTimeFrame < 3600 ? '2-digit' : undefined });
-        tick.textContent = label;
-        timelineContainer.appendChild(tick);
-    }
-}
-
-// Function to update tick labels based on selectedTimeFrame
-function updateSliderTicks() {
-    sliderTicksContainer.innerHTML = '';
-    // Only show two ticks: left (limit) and right ("now")
-    const leftTick = document.createElement('span');
-    leftTick.style.flex = '1 1 0';
-    leftTick.style.textAlign = 'left';
-    // Format left label as mm:ss or h:mm:ss
-    let label;
-    if (selectedTimeFrame >= 3600) {
-        const h = Math.floor(selectedTimeFrame / 3600);
-        const m = Math.floor((selectedTimeFrame % 3600) / 60);
-        label = `${h}h${m > 0 ? m + 'm' : ''}`;
-    } else if (selectedTimeFrame >= 60) {
-        const m = Math.floor(selectedTimeFrame / 60);
-        const s = selectedTimeFrame % 60;
-        label = s === 0 ? `${m}m` : `${m}m${s}s`;
-    } else {
-        label = `${selectedTimeFrame}s`;
-    }
-    leftTick.textContent = label;
-    sliderTicksContainer.appendChild(leftTick);
-
-    const rightTick = document.createElement('span');
-    rightTick.style.flex = '1 1 0';
-    rightTick.style.textAlign = 'right';
-    rightTick.textContent = 'now';
-    sliderTicksContainer.appendChild(rightTick);
-}
-
-function updatePieChartForWindow() {
-    const now = Date.now();
-    const cutoff = now - selectedTimeFrame * 1000;
-    windowMessages = chatBuffer.filter(msg => msg.ts >= cutoff) || [];
-
-    // Aggregate sentiment counts in the window
-    const windowSentimentCounts = {};
-    windowMessages.forEach(msg => {
-        if (Array.isArray(msg.predictions)) {
-            msg.predictions.forEach(pred => {
-                windowSentimentCounts[pred.sentiment] = (windowSentimentCounts[pred.sentiment] || 0) + 1;
-            });
-        }
-    });
-
-    if (!chatPaused) updatePieChart(windowSentimentCounts);
-}
-
-// --- Ranking List with Up/Down Arrows ---
-let previousRanking = [];
-function updateRankingList(sortedSentiments) {
-    movementArrowList.innerHTML = '';
-    sortedSentiments.forEach((item, idx) => {
-        const li = document.createElement('li');
-        li.style.display = 'flex';
-        li.style.alignItems = 'center';
-        li.style.gap = '6px';
-        li.style.whiteSpace = 'nowrap'; // Prevent line break
-        li.style.overflow = 'hidden';
-        li.style.textOverflow = 'ellipsis';
-        li.style.maxWidth = '220px'; // Adjust as needed
-
-        // Arrow logic
-        const prevIdx = previousRanking.findIndex(s => s.sentiment === item.sentiment);
-        let arrow = '';
-        let arrowColor = '';
-        if (prevIdx !== -1) {
-            if (prevIdx > idx) {
-                arrow = '⬆︎';
-                arrowColor = 'green';
-            } else if (prevIdx < idx) {
-                arrow = '⬇︎';
-                arrowColor = 'red';
-            }
-        }
-        li.style.padding = '0.5px 0'; // Add vertical padding
-
-        // Arrow (if any)
-        if (arrow) {
-            const arrowSpan = document.createElement('span');
-            arrowSpan.textContent = arrow;
-            arrowSpan.style.color = arrowColor;
-            arrowSpan.style.fontWeight = 'bold';
-            arrowSpan.style.marginRight = '2px';
-            li.appendChild(arrowSpan);
-        }
-
-        //li.appendChild(sentimentLabel);
-        li.appendChild(document.createTextNode(' '));
-        movementArrowList.appendChild(li);
-    });
-    previousRanking = sortedSentiments.map(s => ({ ...s })); // Deep copy
-}
-
-// --- Sentiment Data Aggregation Example ---
-const sentimentCounts = {};
-function aggregateSentiment(message) {
-    if (Array.isArray(message.predictions)) {
-        message.predictions.forEach(pred => {
-            sentimentCounts[pred.sentiment] = (sentimentCounts[pred.sentiment] || 0) + 1;
-        });
-        // Update UI
-        updatePieChartForWindow();        // Sort and update ranking
-        const sorted = Object.entries(sentimentCounts)
-            .map(([sentiment, count]) => ({ sentiment, count }))
-            .sort((a, b) => b.count - a.count);
-        //updateRankingList(sorted);
-    }
-}
-
 // Pie chart canvas
 const pieCanvas = document.createElement('canvas');
 pieCanvas.id = 'sentiment-pie';
@@ -918,6 +614,7 @@ pieCanvas.style.height = '300px';
 pieCanvas.width = 900;
 pieCanvas.height = 300;
 pieCanvas.setAttribute('style', 'width:900px !important;height:300px !important;display:block;');
+
 const pieWrapper = document.createElement('div');
 pieWrapper.style.width = '900px';
 pieWrapper.style.height = '300px';
@@ -928,15 +625,6 @@ sentimentSummaryContainer.appendChild(pieWrapper);
 //sentimentSummaryContainer.appendChild(movementArrowList);
 
 let chatPaused = false;
-// stay scrolled to the bottom
-const scrollOverlayToBottom = () => {
-    const messagesContainer = document.getElementById('hivemind-messages');
-    if (messagesContainer) {
-        messagesContainer.scrollTop = messagesContainer.scrollHeight;
-    }
-};
-
-import ChatClient from '../src/chatClient/index.js';
 
 const chatClient = new ChatClient('twitch'); // or 'youtube'
 chatClient.on('message', (msg) => {
@@ -947,7 +635,56 @@ chatClient.on('message', (msg) => {
     addMessageToOverlay(msg)
 });
 
-const addMessageToOverlay = (message) => {
+const summaryClient = new SummaryClient();
+
+// Update bar chart when time frame changes
+timeFrameRadios.querySelectorAll('input[type=radio]').forEach(radio => {
+    radio.addEventListener('change', () => {
+        updateBarChart();
+        updateTimelineLabels();
+    });
+});
+
+// Listen for messages from the chat client (to be implemented)
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+    if (request.type === "tabUrl") {
+        // Use request.url as needed
+        console.log("Tab URL received in content script:", request.url);
+        // You can now use request.url in your content script logic
+        chatClient.connect(request.url);
+    }
+    if (request.type === "getOverlayHtml") {
+        const overlay = document.getElementById('hivemind-overlay');
+        sendResponse({
+            overlayHtml: overlay ? overlay.outerHTML : "<div>Overlay not found.</div>"
+        });
+        return true;
+    }
+});
+
+chrome.runtime.sendMessage(
+    { action: "predict", prompt: "Your prompt here" },
+    (response) => {
+        if (response && response.result) {
+            addMessageToOverlay(response.result);
+        }
+    }
+);
+
+/**
+ * Aggregate sentiment predictions from a message and update the sentiment summary.
+ */
+function scrollOverlayToBottom() {
+    const messagesContainer = document.getElementById('hivemind-messages');
+    if (messagesContainer) {
+        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    }
+}
+
+/**
+ * Aggregate sentiment predictions from a message and update the sentiment summary.
+ */
+function addMessageToOverlay(message) {
     const messageElement = renderMessageElement(message);
 
     // Create a parent container for messages
@@ -969,8 +706,11 @@ const addMessageToOverlay = (message) => {
     if (!chatPaused) updateBarChart();
     if (!chatPaused) updatePieChartForWindow();
     if (!chatPaused) updateTimelineLabels();
-};
+}
 
+/**
+ * Aggregate sentiment predictions from a message and update the sentiment summary.
+ */
 function renderMessageElement(message) {
     // Alternate user colors
     
@@ -1043,6 +783,9 @@ function renderMessageElement(message) {
     return messageElement;
 }
 
+/**
+ * Update the pie chart based on the current window's sentiment counts.
+ */
 function updateBarChart() {
     let bucketCount = Math.max(10, Math.min(100, Math.round(selectedTimeFrame / 2)));
     const timespan = selectedTimeFrame;
@@ -1198,41 +941,9 @@ function updateBarChart() {
     }
 }
 
-// Update bar chart when time frame changes
-timeFrameRadios.querySelectorAll('input[type=radio]').forEach(radio => {
-    radio.addEventListener('change', () => {
-        updateBarChart();
-        updateTimelineLabels();
-    });
-});
-
-// Listen for messages from the chat client (to be implemented)
-chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-    if (request.type === "tabUrl") {
-        // Use request.url as needed
-        console.log("Tab URL received in content script:", request.url);
-        // You can now use request.url in your content script logic
-        chatClient.connect(request.url);
-    }
-    if (request.type === "getOverlayHtml") {
-        const overlay = document.getElementById('hivemind-overlay');
-        sendResponse({
-            overlayHtml: overlay ? overlay.outerHTML : "<div>Overlay not found.</div>"
-        });
-        return true;
-    }
-});
-
-chrome.runtime.sendMessage(
-    { action: "predict", prompt: "Your prompt here" },
-    (response) => {
-        if (response && response.result) {
-            addMessageToOverlay(response.result);
-        }
-    }
-);
-
-// Helper to find a "nice" round number for axis ticks
+/**
+ * Calculates a "nice" tick interval for a chart axis based on the maximum value and desired tick count.
+ */
 function niceTickInterval(maxValue, tickCount) {
     if (maxValue === 0) return 1;
     const rough = maxValue / (tickCount - 1);
@@ -1250,4 +961,352 @@ function niceTickInterval(maxValue, tickCount) {
         }
     }
     return bestStep;
+}
+
+// --- Chart.js Pie Chart Setup (make sure Chart.js is loaded in your extension) ---
+let toggledSentiments = new Set();
+let pieChart;
+/**
+ * Updates the pie chart with the given sentiment counts.
+ */
+function updatePieChart(sentimentCounts) {
+    // Sort sentimentCounts by count descending
+    const sortedEntries = Object.entries(sentimentCounts).sort((a, b) => b[1] - a[1]);
+    const labels = sortedEntries.map(([sentiment, count]) => {
+        const emoji = sentimentEmojis[sentiment] || sentimentEmojis.default;
+        return `${emoji} ${sentiment} (${count})`;
+    });
+    const data = sortedEntries.map(([, count]) => count);
+    const sentiments = sortedEntries.map(([sentiment, ]) => sentiment);
+    const backgroundColors = sentiments.map(sentiment =>
+        sentimentColorPalette[sentiment.trim().toLowerCase()] || sentimentColorPalette.default
+    );    
+    if (!pieChart) {
+        const ctx = pieCanvas.getContext('2d');
+        pieChart = new Chart(ctx, {
+            type: 'pie',
+            data: {
+                labels: labels, // Slice labels
+                datasets: [{
+                    data: data,
+                    backgroundColor: backgroundColors,
+                }]
+            },
+            options: {
+                responsive: false,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: true,
+                        position: 'right',
+                        labels: {
+                            generateLabels: function(chart) {
+                                const data = chart.data;
+                                if (data.labels.length && data.datasets.length) {
+                                    return data.labels.map((label, i) => ({
+                                        text: label,
+                                        fontColor: '#fff',
+                                        color: '#fff',
+                                        fillStyle: data.datasets[0].backgroundColor[i],
+                                        hidden: chart.getDatasetMeta(0).data[i].hidden,
+                                        index: i,
+                                        datasetIndex: 0 // Important for onClick!
+                                    }));
+                                }
+                                return [];
+                            }
+                        },
+                        onClick: function(e, legendItem, legend) {
+                            // Double-click detection
+                            // If double-clicked on the same legend item within threshold, toggle ONLY this sentiment,
+                            // or if already only this sentiment is visible, restore all (undo)
+                            
+                            if (!legendClickState.lastClickTime) legendClickState.lastClickTime = 0;
+                            if (legendClickState.lastClickIndex === undefined || legendClickState.lastClickIndex === null) legendClickState.lastClickIndex = -1;
+                            const now = Date.now();
+                            const DOUBLE_CLICK_MS = 500;
+                            const chart = legend.chart;
+                            const index = legendItem.index;
+                            const sentiment = chart.data.labels[index]
+                                .replace(/^[^\w]+/, '') // Remove leading emoji and spaces
+                                .replace(/\s*\(\d+\)$/, '') // Remove trailing (count)
+                                .trim()
+                                .toLowerCase();
+                            if (
+                                legendClickState.lastClickIndex === index &&
+                                now - legendClickState.lastClickTime < DOUBLE_CLICK_MS
+                            ) {
+                                // If only this sentiment is visible (all others hidden), restore all
+                                if (
+                                    toggledSentiments.size === chart.data.labels.length - 1 &&
+                                    !toggledSentiments.has(sentiment)
+                                ) {
+                                    toggledSentiments.clear();
+                                } else if (
+                                    toggledSentiments.size === chart.data.labels.length - 1 &&
+                                    toggledSentiments.has(sentiment)
+                                ) {
+                                    // If this sentiment is the only one hidden, restore all
+                                    toggledSentiments.clear();
+                                } else {
+                                    // Hide all except this sentiment
+                                    toggledSentiments = new Set(
+                                        chart.data.labels
+                                            .map(l => l.replace(/\s*\(\d+\)$/, '').trim().toLowerCase())
+                                            .filter(s => s !== sentiment)
+                                    );
+                                }
+                            } else {
+                                // Normal single click: toggle this sentiment
+                                if (toggledSentiments.has(sentiment)) {
+                                    toggledSentiments.delete(sentiment);
+                                } else {
+                                    toggledSentiments.add(sentiment);
+                                }
+                            }
+
+                            legendClickState.lastClickTime = now;
+                            legendClickState.lastClickIndex = index;
+
+                            // After toggling, update all slices' hidden state based on sentiment key
+                            const meta = chart.getDatasetMeta(legendItem.datasetIndex);
+                            meta.data.forEach((slice, i) => {
+                                const sliceSentiment = pieChart.data.labels[i]
+                                    .replace(/^[^\w]+/, '') // Remove leading emoji and spaces
+                                    .replace(/\s*\(\d+\)$/, '') // Remove trailing (count)
+                                    .trim()
+                                    .toLowerCase();
+                                slice.hidden = toggledSentiments.has(sliceSentiment);
+                            });
+
+                            chart.update();
+                            const messagesContainer = document.getElementById('hivemind-messages');
+                            if (messagesContainer) {
+                                messagesContainer.innerHTML = '';
+                                windowMessages.forEach(msg => {
+                                    if (msg.predictions.some(pred => toggledSentiments.has(pred.sentiment))) return;
+                                    // Use the helper function to render the message element without side effects
+                                    const messageElement = renderMessageElement(msg);
+                                    messagesContainer.appendChild(messageElement);
+                                });
+                            }
+                            updateBarChart(); // Update bar chart to reflect new sentiment visibility
+                        }
+                    }
+                }
+            }
+        });
+    } else {
+        pieChart.data.labels = labels;
+        pieChart.data.datasets[0].data = data;
+        pieChart.data.datasets[0].backgroundColor = backgroundColors;
+
+        // After updating data, re-apply hidden state to slices
+        const meta = pieChart.getDatasetMeta(0);
+        meta.data.forEach((slice, i) => {
+            if (pieChart.data.labels[i] === undefined) {
+            return;
+            }
+            // Remove emoji and (#) from the label to get the sentiment key
+            const sliceSentiment = pieChart.data.labels[i]
+                .replace(/^[^\w]+/, '') // Remove leading emoji and spaces
+                .replace(/\s*\(\d+\)$/, '') // Remove trailing (count)
+                .trim()
+                .toLowerCase();
+            slice.hidden = toggledSentiments.has(sliceSentiment);
+        });
+
+        pieChart.update();
+        updateBarChart(); // Optionally update bar chart to reflect new window
+    }
+}
+
+/**
+ * Updates the time slider to match the selected time frame.
+ */
+function updateTimelineLabels() {
+    timelineContainer.innerHTML = '';
+    const tickCount = 8; // Match your sliderTicks
+    const value = parseInt(timeSlider.value, 10);
+    const bufferStart = chatBuffer.length ? chatBuffer[0].ts : Date.now();
+    const bufferEnd = chatBuffer.length ? chatBuffer[chatBuffer.length - 1].ts : Date.now();
+    const bufferDuration = bufferEnd - bufferStart;
+    const sliderFraction = value / 99;
+    const windowEnd = bufferStart + sliderFraction * bufferDuration;
+    const windowStart = windowEnd - selectedTimeFrame * 1000;
+
+    const interval = selectedTimeFrame / (tickCount - 1);
+
+    for (let i = 0; i < tickCount; i++) {
+        const tick = document.createElement('span');
+        tick.style.flex = '1 1 0';
+        tick.style.textAlign = 'center';
+        // Calculate timestamp for this tick
+        let secondsAgo = selectedTimeFrame - i * interval;
+        let ts = windowEnd - secondsAgo * 1000;
+        const date = new Date(ts);
+        // Format as HH:MM:SS or HH:MM
+        let label = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: selectedTimeFrame < 3600 ? '2-digit' : undefined });
+        tick.textContent = label;
+        timelineContainer.appendChild(tick);
+    }
+}
+
+/**
+ * Updates the slider ticks to show the left (limit) and right ("now") labels.
+ */
+function updateSliderTicks() {
+    sliderTicksContainer.innerHTML = '';
+    // Only show two ticks: left (limit) and right ("now")
+    const leftTick = document.createElement('span');
+    leftTick.style.flex = '1 1 0';
+    leftTick.style.textAlign = 'left';
+    // Format left label as mm:ss or h:mm:ss
+    let label;
+    if (selectedTimeFrame >= 3600) {
+        const h = Math.floor(selectedTimeFrame / 3600);
+        const m = Math.floor((selectedTimeFrame % 3600) / 60);
+        label = `${h}h${m > 0 ? m + 'm' : ''}`;
+    } else if (selectedTimeFrame >= 60) {
+        const m = Math.floor(selectedTimeFrame / 60);
+        const s = selectedTimeFrame % 60;
+        label = s === 0 ? `${m}m` : `${m}m${s}s`;
+    } else {
+        label = `${selectedTimeFrame}s`;
+    }
+    leftTick.textContent = label;
+    sliderTicksContainer.appendChild(leftTick);
+
+    const rightTick = document.createElement('span');
+    rightTick.style.flex = '1 1 0';
+    rightTick.style.textAlign = 'right';
+    rightTick.textContent = 'now';
+    sliderTicksContainer.appendChild(rightTick);
+}
+
+/**
+ * Updates the pie chart for the current window based on the selected time frame.
+ */
+function updatePieChartForWindow() {
+    const now = Date.now();
+    const cutoff = now - selectedTimeFrame * 1000;
+    windowMessages = chatBuffer.filter(msg => msg.ts >= cutoff) || [];
+
+    // Aggregate sentiment counts in the window
+    const windowSentimentCounts = {};
+    windowMessages.forEach(msg => {
+        if (Array.isArray(msg.predictions)) {
+            msg.predictions.forEach(pred => {
+                windowSentimentCounts[pred.sentiment] = (windowSentimentCounts[pred.sentiment] || 0) + 1;
+            });
+        }
+    });
+
+    if (!chatPaused) updatePieChart(windowSentimentCounts);
+}
+
+// --- Ranking List with Up/Down Arrows ---
+let previousRanking = [];
+/**
+ * Updates the ranking list with sentiment movements.
+ */
+function updateRankingList(sortedSentiments) {
+    movementArrowList.innerHTML = '';
+    sortedSentiments.forEach((item, idx) => {
+        const li = document.createElement('li');
+        li.style.display = 'flex';
+        li.style.alignItems = 'center';
+        li.style.gap = '6px';
+        li.style.whiteSpace = 'nowrap'; // Prevent line break
+        li.style.overflow = 'hidden';
+        li.style.textOverflow = 'ellipsis';
+        li.style.maxWidth = '220px'; // Adjust as needed
+
+        // Arrow logic
+        const prevIdx = previousRanking.findIndex(s => s.sentiment === item.sentiment);
+        let arrow = '';
+        let arrowColor = '';
+        if (prevIdx !== -1) {
+            if (prevIdx > idx) {
+                arrow = '⬆︎';
+                arrowColor = 'green';
+            } else if (prevIdx < idx) {
+                arrow = '⬇︎';
+                arrowColor = 'red';
+            }
+        }
+        li.style.padding = '0.5px 0'; // Add vertical padding
+
+        // Arrow (if any)
+        if (arrow) {
+            const arrowSpan = document.createElement('span');
+            arrowSpan.textContent = arrow;
+            arrowSpan.style.color = arrowColor;
+            arrowSpan.style.fontWeight = 'bold';
+            arrowSpan.style.marginRight = '2px';
+            li.appendChild(arrowSpan);
+        }
+
+        //li.appendChild(sentimentLabel);
+        li.appendChild(document.createTextNode(' '));
+        movementArrowList.appendChild(li);
+    });
+    previousRanking = sortedSentiments.map(s => ({ ...s })); // Deep copy
+}
+
+const sentimentCounts = {};
+/**
+ * Aggregates sentiment counts from a message and updates the pie chart.
+ * @param {*} message 
+ */
+function aggregateSentiment(message) {
+    if (Array.isArray(message.predictions)) {
+        message.predictions.forEach(pred => {
+            sentimentCounts[pred.sentiment] = (sentimentCounts[pred.sentiment] || 0) + 1;
+        });
+        // Update UI
+        updatePieChartForWindow();        // Sort and update ranking
+        const sorted = Object.entries(sentimentCounts)
+            .map(([sentiment, count]) => ({ sentiment, count }))
+            .sort((a, b) => b.count - a.count);
+        //updateRankingList(sorted);
+    }
+}
+
+/**
+ * Buffers a chat message for processing.
+ * @param {*} message 
+ */
+function bufferMessage(message) {
+    chatBuffer.push({ ...message, ts: Date.now() });
+    // Remove old messages
+    const cutoff = Date.now() - MAX_BUFFER_SECONDS * 1000;
+    while (chatBuffer.length && chatBuffer[0].ts < cutoff) {
+        chatBuffer.shift();
+    }
+}
+
+/**
+ * Adjust the timeSlider so that its range always matches the selectedTimeFrame.
+ * The slider's left (0) is the oldest point in the buffer that still covers the selectedTimeFrame,
+ * and right (99) is "now".
+ * When the time frame changes, reset the slider to "now".
+ */
+function adjustTimeSliderForTimeFrame() {
+    // Always keep slider at "now" when time frame changes
+    timeSlider.value = 99;
+}
+
+// When you want to summarize the current chat window:
+async function updateSummaryUI() {
+    try {
+        const summary = await summaryClient.summarizeWindow(windowMessages, {
+            timeframe: selectedTimeFrame,
+            channel: 'your_channel_name'
+        });
+        // Now update your emotion radar UI, alerts, etc. with summary
+        updateEmotionRadarUI(summary);
+    } catch (err) {
+        console.error('Summary error:', err);
+    }
 }
