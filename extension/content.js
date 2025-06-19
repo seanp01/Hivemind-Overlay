@@ -1,6 +1,6 @@
 import Chart from 'chart.js/auto';
-import ChatClient from '../src/chatClient/index.js';
-import SummaryClient from '../src/summaryClient/index.js';
+import ChatClient from '../src/chat-client/index.js';
+import SummaryClient from '../src/summary-client/index.js';
 
 export const sentimentEmojis = {
     positive: '😊',
@@ -352,6 +352,15 @@ expandButton.addEventListener('click', () => {
     expandButton.style.display = 'none';
 });
 
+
+const radarIframe = document.createElement('iframe');
+radarIframe.src = chrome.runtime.getURL('emotion-radar.html');
+radarIframe.style.width = '520px';
+radarIframe.style.height = '520px';
+radarIframe.style.border = 'none';
+radarIframe.style.background = 'transparent';
+radarIframe.allowTransparency = 'true';
+
 overlayContainer.appendChild(sentimentSummaryContainer);
 
 // --- Chat Volume Slider & Bar Chart ---
@@ -622,6 +631,8 @@ pieWrapper.style.overflow = 'hidden';
 pieWrapper.appendChild(pieCanvas);
 sentimentSummaryContainer.style.alignItems = 'center'; // helps vertically align
 sentimentSummaryContainer.appendChild(pieWrapper);
+
+sentimentSummaryContainer.appendChild(radarIframe);
 //sentimentSummaryContainer.appendChild(movementArrowList);
 
 let chatPaused = false;

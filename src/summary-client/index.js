@@ -3,7 +3,7 @@
 
 class SummaryClient {
     constructor(options = {}) {
-        // e.g., endpoint, API key, model name, etc.
+        //TODO: establish LM port for the sentiment analysis service and pass it to the constructor of the LLMService
         this.endpoint = options.endpoint || 'http://localhost:5223/summarize';
         this.apiKey = options.apiKey || null;
         this.model = options.model || 'summary-llm';
