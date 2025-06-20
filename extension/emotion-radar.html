@@ -6,7 +6,7 @@
     <title>Emotion Radar</title>
     <style>
         body {
-            background: #0d1117;
+            background: transparent;
             color: white;
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             display: flex;
@@ -22,10 +22,9 @@
             border-radius: 8px;
             overflow: hidden;
             box-shadow: 0 2px 8px #0006;
-            min-width: 100px;
         }
         .sentiment-table th, .sentiment-table td {
-            padding: 8px 16px;
+            padding: 5px 5px;
             text-align: left;
         }
         .sentiment-table th {
@@ -45,8 +44,8 @@
         }
         .radar-container {
             position: relative;
-            width: 600px;
-            height: 300px;
+            width: 300px;
+            height: 150px;
             border-radius: 25%;
             background: radial-gradient(#1b1f27 0%, #0d1117 80%);
             overflow: hidden;
@@ -127,7 +126,7 @@
                 " />
             </svg>
         </div>
-        <div class="sentiment-table" style="width: 90%; max-width: 600px;">
+        <div class="sentiment-table" style="width: 250px; max-width: 600px;">
             <table style="width: 100%;">
                 <thead>
                     <tr>

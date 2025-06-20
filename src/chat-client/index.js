@@ -1,7 +1,7 @@
 import tmi from 'tmi.js'; // Import tmi.js for Twitch chat handling
 import LLMService from '../llm/index.js';
-import copypastaData from '../data/copypasta.json' assert { type: "json" };
-import emotesData from '../data/emotes.json' assert { type: "json" };
+import copypastaData from '../data/copypasta.json' with { type: "json" };
+import emotesData from '../data/emotes.json' with { type: "json" };
 
 const llm = new LLMService();
 
@@ -41,10 +41,10 @@ class ChatClient {
 
             this.twitchClient.connect();
 
-            this.twitchClient.on('message', (channel, tags, message, self) => {
+            this.twitchClient.on('message', async (channel, tags, message, self) => {
                 if (self) return; // Ignore echoed messages
 
-                const autoLabeledMessage = this.autoLabelMessage(message, tags);
+                const autoLabeledMessage = await this.autoLabelMessage(message, tags);
                 if (autoLabeledMessage) {
                     this.emit('message', autoLabeledMessage);
                 } else {
@@ -173,24 +173,13 @@ class ChatClient {
             entry.count >= repeatThreshold &&
             (entry.lastSeen - entry.firstSeen) <= windowMs
         ) {
-            import('fs').then(fs => {
-            const copypastaPath = new URL('../data/copypasta.json', import.meta.url);
-            fs.readFile(copypastaPath, 'utf8', (err, data) => {
-                if (err) return;
-                let copypastaJson;
-                try {
-                copypastaJson = JSON.parse(data);
-                } catch {
-                copypastaJson = { copypastas: [] };
-                }
-                // Avoid duplicates
-                if (!copypastaJson.copypastas.some(p => p.text.trim() === messageText.trim())) {
-                copypastaJson.copypastas.push({ text: messageText.trim() });
-                fs.writeFile(copypastaPath, JSON.stringify(copypastaJson, null, 2), () => {});
+            chrome.storage.local.get({ copypastas: [] }, (result) => {
+                const localCopypastas = result.copypastas;
+                if (!localCopypastas.some(p => p.trim() === messageText.trim())) {
+                    localCopypastas.push(messageText.trim());
+                    chrome.storage.local.set({ copypastas: localCopypastas });
                 }
             });
-            });
-            // Optionally, remove from candidates to avoid duplicate appends
             clearTimeout(entry.timeoutId);
             this.longMessageCandidates.delete(messageText);
         }
@@ -332,7 +321,7 @@ class ChatClient {
                 platform: this.platform,
                 tags,
                 subOnlyMode: this.subOnlyMode,
-                predictions: [{ sentiment: 'command', score: 1 }]
+                predictions: [{ sentiment: 'command_request', score: 1 }]
             };
         }
 
@@ -344,7 +333,7 @@ class ChatClient {
             platform: this.platform,
             tags,
             subOnlyMode: this.subOnlyMode,
-            predictions: [{ sentiment: 'numeric', score: 1 }]
+            predictions: [{ sentiment: 'answer', score: 1 }]
         };
 
         // Link only
@@ -355,7 +344,7 @@ class ChatClient {
             platform: this.platform,
             tags,
             subOnlyMode: this.subOnlyMode,
-            predictions: [{ sentiment: 'link', score: 1 }]
+            predictions: [{ sentiment: 'conversation', score: 1 }]
         };
 
         // @mention only
@@ -366,12 +355,19 @@ class ChatClient {
             platform: this.platform,
             tags,
             subOnlyMode: this.subOnlyMode,
-            predictions: [{ sentiment: 'mention', score: 1 }]
+            predictions: [{ sentiment: 'conversation', score: 1 }]
         };
 
         // Conversation tracking (messages containing @username)
         if (/@\w+/.test(message)) {
-            return { type: 'conversation', message };
+            return {
+                user: tags['display-name'] || tags.username,
+                message,
+                platform: this.platform,
+                tags,
+                subOnlyMode: this.subOnlyMode,
+                predictions: [{ sentiment: 'conversation', score: 1 }]
+            };
         }
 
         // Emote only (Twitch emotes or common emotes)
@@ -380,28 +376,47 @@ class ChatClient {
         // Use emotes from emotes.json for fallback detection
         // All camelCase, lowerCamelCase, or ALLUPPERCASE words with no spaces are emotes
         const words = message.trim().split(/\s+/);
+        // Enhanced emote spam detection: allow trailing numbers and ALLUPPERCASE
         if (
             words.length > 0 &&
             words.every(word =>
-                /^[A-Z][a-z]+(?:[A-Z][a-z]+)+$/.test(word) || // CamelCase
-                /^[a-z]+(?:[A-Z][a-z]+)+$/.test(word) ||      // lowerCamelCase
-                /^[A-Z0-9]+$/.test(word)                      // ALLUPPERCASE (no spaces)
+            /^[A-Z][a-z]+(?:[A-Z][a-z]+)+\d*$/.test(word) || // CamelCase + optional digits
+            /^[a-z]+(?:[A-Z][a-z]+)+\d*$/.test(word) ||      // lowerCamelCase + optional digits
+            (/^[A-Z]{8,}$/.test(word) && !/\s/.test(word)) || // ALLUPPERCASE, 8+ chars, no spaces
+            /^[a-z]+[A-Z][a-z]+\d*$/.test(word) ||           // dsaRaid style: lowercase(s) + Uppercase + lowercase(s) + optional digits
+            /^[a-z]+[A-Z]+\d*$/.test(word)                   // dsaRaid style: lowercase(s) + Uppercase(s) + optional digits
             )
         ) {
-            return { type: 'emote', message };
+            return {
+            user: tags['display-name'] || tags.username,
+            message,
+            platform: this.platform,
+            tags,
+            subOnlyMode: this.subOnlyMode,
+            predictions: [{ sentiment: 'emote_spam', score: 1 }]
+            };
         } else {
             // Fallback: check if all words are in emotes.json list
             const emoteList = emotesData.emotes || [];
             if (
-                words.length > 0 &&
-                words.every(word => emoteList.includes(word))
+            words.length > 0 &&
+            words.every(word => emoteList.includes(word))
             ) {
-                return { type: 'emote', message };
+            return {
+                user: tags['display-name'] || tags.username,
+                message,
+                platform: this.platform,
+                tags,
+                subOnlyMode: this.subOnlyMode,
+                predictions: [{ sentiment: 'emote_spam', score: 1 }]
+            };
             }
         }
 
         // Copypasta detection (compare to known list from copypasta.json)
-        const knownCopypastas = copypastaData.copypastas.map(pasta => pasta.text.trim());
+        let knownCopypastas = copypastaData.copypastas.map(pasta => pasta.text.trim());
+        const localCopypastas = JSON.parse(localStorage.getItem('copypastas') || '[]');
+        knownCopypastas = [...new Set([...knownCopypastas, ...localCopypastas])];
         if (knownCopypastas.some(pasta => message.trim() === pasta)) {
             return {
                 user: tags['display-name'] || tags.username,

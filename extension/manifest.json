@@ -14,7 +14,8 @@
   "host_permissions": [
     "https://*.twitch.tv/*",
     "https://*.youtube.com/*",
-    "http://localhost:5222/*"
+    "http://localhost:5222/*",
+    "https://twitframe.com/*"
   ],
   "background": {
     "service_worker": "background.bundle.js"
@@ -39,7 +40,7 @@
   ],
   "web_accessible_resources": [
     {
-      "resources": ["styles.css", "content.js", "popout.html", "popout.js"],
+      "resources": ["styles.css", "content.js", "popout.html", "popout.js", "emotion-radar.html", "emotion-radar.js"],
       "matches": ["<all_urls>"]
     }
   ],

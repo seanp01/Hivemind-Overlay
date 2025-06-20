@@ -287,7 +287,7 @@ if (!overlayContainer) {
     overlayContainer.style.zIndex = '9999';
     overlayContainer.style.maxHeight = 'calc(100vh - 30px)'; // 10px top + 20px bottom
     overlayContainer.style.overflowY = 'scroll';
-    overlayContainer.style.width = '1000px';
+    overlayContainer.style.width = '100%';
     overlayContainer.style.fontFamily = 'Arial, sans-serif';
     overlayContainer.style.fontSize = '14px';
     document.body.appendChild(overlayContainer);
@@ -355,10 +355,15 @@ expandButton.addEventListener('click', () => {
 
 const radarIframe = document.createElement('iframe');
 radarIframe.src = chrome.runtime.getURL('emotion-radar.html');
-radarIframe.style.width = '520px';
-radarIframe.style.height = '520px';
+radarIframe.style.width = '300px';
+radarIframe.style.height = '300px';
 radarIframe.style.border = 'none';
+radarIframe.style.position = 'absolute';
+radarIframe.style.right = '0';
 radarIframe.style.background = 'transparent';
+radarIframe.style.overflow = 'hidden';
+radarIframe.scrolling = 'no';
+radarIframe.setAttribute('scrolling', 'no');
 radarIframe.allowTransparency = 'true';
 
 overlayContainer.appendChild(sentimentSummaryContainer);
@@ -669,7 +674,6 @@ function updateEmbedsForWindow() {
 
 const chatClient = new ChatClient('twitch'); // or 'youtube'
 chatClient.on('message', (msg) => {
-    console.log(toggledSentiments);
     aggregateSentiment(msg);
     // If the message contains a URL for any type of media embed, add an embed to the UI
     if (typeof msg.message === "string") {
@@ -678,9 +682,32 @@ chatClient.on('message', (msg) => {
         if (urls) {
             addEmbedToOverlay(urls);
         }
+        // Special handling for X/Twitter and Wikipedia links
+        urls && urls.forEach(url => {
+            // X/Twitter embed
+            if (/^(https?:\/\/)?(x\.com|twitter\.com)\/[^\/]+\/status\/\d+/i.test(url)) {
+                // Use publish.twitter.com embed
+                const tweetIdMatch = url.match(/status\/(\d+)/);
+                if (tweetIdMatch) {
+                    const tweetId = tweetIdMatch[1];
+                    const embedUrl = `https://twitframe.com/show?url=${encodeURIComponent(url)}`;
+                    addEmbedToOverlay([embedUrl]);
+                }
+            }
+            // Wikipedia preview (simple iframe)
+            if (/^https?:\/\/([a-z]+\.)?wikipedia\.org\/wiki\/[^ ]+/i.test(url)) {
+                // Show a preview iframe for Wikipedia
+                const wikiEmbedUrl = url.replace(/#.*/, ''); // Remove fragment
+                addEmbedToOverlay([wikiEmbedUrl]);
+            }
+        });
     }
     bufferMessage(msg);
-    if (toggledSentiments && msg.predictions.some(pred => toggledSentiments.has(pred.sentiment))) return;
+    if (
+        toggledSentiments &&
+        Array.isArray(msg.predictions) &&
+        msg.predictions.some(pred => toggledSentiments.has(pred.sentiment))
+    ) return;    
     addMessageToOverlay(msg)
 });
 
@@ -722,52 +749,151 @@ chrome.runtime.sendMessage(
 
 function addEmbedToOverlay(urls) {
     urls.forEach(url => {
-        // Basic media type detection
         let embedElement = null;
+        // Image
         if (/\.(jpg|jpeg|png|gif|webp)$/i.test(url)) {
-            // Image
             embedElement = document.createElement('img');
             embedElement.src = url;
-            embedElement.style.maxWidth = '200px';
-            embedElement.style.maxHeight = '120px';
             embedElement.style.margin = '4px';
-        } else if (/youtube\.com\/watch\?v=|youtu\.be\//i.test(url)) {
-            // YouTube video
+        }
+        // YouTube video
+        else if (/youtube\.com\/watch\?v=|youtu\.be\//i.test(url)) {
             let videoId = null;
             const ytMatch = url.match(/(?:v=|youtu\.be\/)([A-Za-z0-9_\-]+)/);
             if (ytMatch) videoId = ytMatch[1];
             if (videoId) {
                 embedElement = document.createElement('iframe');
                 embedElement.src = `https://www.youtube.com/embed/${videoId}`;
-                embedElement.width = "220";
-                embedElement.height = "124";
                 embedElement.frameBorder = "0";
                 embedElement.allow = "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture";
                 embedElement.allowFullscreen = true;
                 embedElement.style.margin = '4px';
             }
-        } else if (/twitch\.tv\/videos\/(\d+)/i.test(url)) {
-            // Twitch VOD
+        }
+        // Twitch VOD
+        else if (/twitch\.tv\/videos\/(\d+)/i.test(url)) {
             const twitchMatch = url.match(/twitch\.tv\/videos\/(\d+)/i);
             if (twitchMatch) {
                 embedElement = document.createElement('iframe');
                 embedElement.src = `https://player.twitch.tv/?video=${twitchMatch[1]}&parent=${location.hostname}`;
-                embedElement.width = "220";
-                embedElement.height = "124";
                 embedElement.frameBorder = "0";
                 embedElement.allowFullscreen = true;
                 embedElement.style.margin = '4px';
             }
-        } else if (/\.mp4$/i.test(url)) {
-            // MP4 video
+        }
+        // MP4 video
+        else if (/\.mp4$/i.test(url)) {
             embedElement = document.createElement('video');
             embedElement.src = url;
             embedElement.controls = true;
-            embedElement.style.maxWidth = '220px';
-            embedElement.style.maxHeight = '124px';
             embedElement.style.margin = '4px';
         }
+        // X/Twitter post
+        else if (/^(https?:\/\/)?(x\.com|twitter\.com)\/[^\/]+\/status\/\d+/i.test(url)) {
+            embedElement.className = 'twitter-tweet';
+            embedElement.innerHTML = `<a href="${url}"></a>`;
+                
+            // Load widgets.js if not already loaded
+            if (!window.twttr) {
+                const script = document.createElement('script');
+                script.src = 'https://platform.twitter.com/widgets.js';
+                script.async = true;
+                document.body.appendChild(script);
+            } else {
+                window.twttr.widgets.load();
+            }
+        }
+        // TikTok video
+        else if (/tiktok\.com\/(@[\w.-]+\/video\/\d+)/i.test(url)) {
+            // Embed using TikTok's embed player
+            embedElement = document.createElement('iframe');
+            embedElement.src = `https://www.tiktok.com/embed/${url.match(/video\/(\d+)/)[1]}`;
+            embedElement.frameBorder = "0";
+            embedElement.allow = "encrypted-media";
+            embedElement.allowFullscreen = true;
+            embedElement.style.margin = '4px';
+        }
+        // Threads post
+        else if (/threads\.net\/@[\w.-]+\/post\/\d+/i.test(url)) {
+            // Threads does not have an official embed, so fallback to a link preview
+            embedElement = document.createElement('a');
+            embedElement.href = url;
+            embedElement.target = '_blank';
+            embedElement.rel = 'noopener noreferrer';
+            embedElement.textContent = "View on Threads";
+            embedElement.style.display = 'inline-block';
+            embedElement.style.margin = '4px';
+            embedElement.style.fontSize = '12px';
+            embedElement.style.color = '#4FC3F7';
+            embedElement.style.textDecoration = 'underline';
+        }
+        // Instagram post
+        else if (/instagram\.com\/p\/[\w-]+/i.test(url)) {
+            embedElement = document.createElement('iframe');
+            embedElement.src = `https://www.instagram.com/p/${url.match(/instagram\.com\/p\/([\w-]+)/i)[1]}/embed`;
+            embedElement.frameBorder = "0";
+            embedElement.allowFullscreen = true;
+            embedElement.style.margin = '4px';
+        }
+        // Facebook post
+        else if (/facebook\.com\/[^\/]+\/posts\/\d+/i.test(url)) {
+            embedElement = document.createElement('iframe');
+            embedElement.src = `https://www.facebook.com/plugins/post.php?href=${encodeURIComponent(url)}`;
+            embedElement.frameBorder = "0";
+            embedElement.allowFullscreen = true;
+            embedElement.style.margin = '4px';
+        }
+        // Reddit post
+        else if (/reddit\.com\/r\/[\w\d_]+\/comments\/[\w\d]+/i.test(url)) {
+            embedElement = document.createElement('iframe');
+            embedElement.src = `https://www.redditmedia.com${url.replace(/^https?:\/\/(www\.)?reddit\.com/, '')}`;
+            embedElement.frameBorder = "0";
+            embedElement.allowFullscreen = true;
+            embedElement.style.margin = '4px';
+        }
+        // Bluesky post
+        else if (/bsky\.app\/profile\/[^\/]+\/post\/[\w\d]+/i.test(url)) {
+            embedElement = document.createElement('iframe');
+            embedElement.src = url;
+            embedElement.frameBorder = "0";
+            embedElement.allowFullscreen = true;
+            embedElement.style.margin = '4px';
+        }
+        // Mastodon post
+        else if (/\/@[\w\d_]+\/\d+$/i.test(url) && /mastodon\./i.test(url)) {
+            embedElement = document.createElement('iframe');
+            embedElement.src = url;
+            embedElement.frameBorder = "0";
+            embedElement.allowFullscreen = true;
+            embedElement.style.margin = '4px';
+        }
+        // Wikipedia article
+        else if (/^https?:\/\/([a-z]+\.)?wikipedia\.org\/wiki\/[^ ]+/i.test(url)) {
+            embedElement = document.createElement('iframe');
+            // Remove fragment for cleaner preview
+            embedElement.src = url.replace(/#.*/, '');
+            embedElement.frameBorder = "0";
+            embedElement.allowFullscreen = false;
+            embedElement.style.margin = '4px';
+        }
+        // Generic link (fallback)
+        else {
+            embedElement = document.createElement('a');
+            embedElement.href = url;
+            embedElement.target = '_blank';
+            embedElement.rel = 'noopener noreferrer';
+            embedElement.textContent = url.replace(/^https?:\/\//, '').split(/[/?#]/)[0];
+            embedElement.style.display = 'inline-block';
+            embedElement.style.margin = '4px';
+            embedElement.style.fontSize = '12px';
+            embedElement.style.color = '#4FC3F7';
+            embedElement.style.textDecoration = 'underline';
+        }
         if (embedElement) {
+            embedElement.style.maxWidth = '250px';
+            embedElement.style.maxHeight = '200px';
+            embedElement.style.objectFit = 'contain';
+            embedElement.style.display = 'inline-block';
             mediaEmbedRowContainer.appendChild(embedElement);
         }
     });
@@ -1119,6 +1245,7 @@ function updatePieChart(sentimentCounts) {
                             }
                         },
                         onClick: function(e, legendItem, legend) {
+                            console.log('Legend item clicked', legendItem);
                             // Double-click detection
                             // If double-clicked on the same legend item within threshold, toggle ONLY this sentiment,
                             // or if already only this sentiment is visible, restore all (undo)
@@ -1126,7 +1253,7 @@ function updatePieChart(sentimentCounts) {
                             if (!legendClickState.lastClickTime) legendClickState.lastClickTime = 0;
                             if (legendClickState.lastClickIndex === undefined || legendClickState.lastClickIndex === null) legendClickState.lastClickIndex = -1;
                             const now = Date.now();
-                            const DOUBLE_CLICK_MS = 500;
+                            const DOUBLE_CLICK_MS = 250;
                             const chart = legend.chart;
                             const index = legendItem.index;
                             const sentiment = chart.data.labels[index]
@@ -1138,27 +1265,33 @@ function updatePieChart(sentimentCounts) {
                                 legendClickState.lastClickIndex === index &&
                                 now - legendClickState.lastClickTime < DOUBLE_CLICK_MS
                             ) {
+                                console.log('double click', legendItem);
                                 // If only this sentiment is visible (all others hidden), restore all
-                                if (
-                                    toggledSentiments.size === chart.data.labels.length - 1 &&
+                                const totalSentiments = chart.data.labels.length;
+                                const onlyThisVisible = (
+                                    toggledSentiments.size === totalSentiments - 1 &&
                                     !toggledSentiments.has(sentiment)
-                                ) {
-                                    toggledSentiments.clear();
-                                } else if (
-                                    toggledSentiments.size === chart.data.labels.length - 1 &&
+                                );
+                                const onlyThisHidden = (
+                                    toggledSentiments.size === totalSentiments - 1 &&
                                     toggledSentiments.has(sentiment)
-                                ) {
-                                    // If this sentiment is the only one hidden, restore all
+                                );
+                                if (onlyThisVisible || onlyThisHidden) {
                                     toggledSentiments.clear();
                                 } else {
+                                    console.log('hide all');
                                     // Hide all except this sentiment
-                                    toggledSentiments = new Set(
-                                        chart.data.labels
-                                            .map(l => l.replace(/\s*\(\d+\)$/, '').trim().toLowerCase())
-                                            .filter(s => s !== sentiment)
-                                    );
+                                    toggledSentiments.clear();
+                                    chart.data.labels.forEach(l => {
+                                        const s = l.replace(/^[^\w]+/, '') // Remove leading emoji and spaces
+                                            .replace(/\s*\(\d+\)$/, '') // Remove trailing (count)
+                                            .trim()
+                                            .toLowerCase();
+                                        if (s !== sentiment) toggledSentiments.add(s);
+                                    });
                                 }
                             } else {
+                                console.log('single click', legendItem);
                                 // Normal single click: toggle this sentiment
                                 if (toggledSentiments.has(sentiment)) {
                                     toggledSentiments.delete(sentiment);
@@ -1305,7 +1438,7 @@ function updatePieChartForWindow() {
     });
 
     if (!chatPaused) updatePieChart(windowSentimentCounts);
-    updateEmbedsForWindow()
+    //updateEmbedsForWindow()
 }
 
 // --- Ranking List with Up/Down Arrows ---
@@ -1365,7 +1498,7 @@ const sentimentCounts = {};
 function aggregateSentiment(message) {
     if (Array.isArray(message.predictions)) {
         message.predictions.forEach(pred => {
-            sentimentCounts[pred.sentiment] = (sentimentCounts[pred.sentiment] || 0) + 1;
+            if (pred.score * 100 >= 10) sentimentCounts[pred.sentiment] = (sentimentCounts[pred.sentiment] || 0) + 1;
         });
         // Update UI
         updatePieChartForWindow();        // Sort and update ranking

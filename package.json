@@ -19,6 +19,7 @@
   "dependencies": {
     "chart.js": "^4.4.9",
     "crypto-browserify": "^3.12.1",
+    "fs": "^0.0.1-security",
     "tmi": "^2.0.0",
     "tmi.js": "^1.8.5"
   },
@@ -30,8 +31,9 @@
     "webpack": "^5.99.9",
     "webpack-cli": "^4.10.0"
   },
-  "version": "1.24.0",
+  "version": "1.25.0",
   "changelog": {
+    "1.25.0": "Added more support for social media embeds. ~ Sean Parker",
     "1.24.0": "Began implementing chat message urls as embeds in the timeline. ~ Sean Parker",
     "1.23.0": "Updated the emotion radar html element to use a map projection of earth. ~ Sean Parker",
     "1.22.0": "Added an html and script for the emotion radar that will output the display values for the live sentiment summary analysis in an iframe using content.js. ~ Sean Parker",

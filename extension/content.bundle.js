@@ -18160,10 +18160,10 @@ const _ = module.exports = {
 
 /***/ }),
 
-/***/ "./src/chatClient/index.js":
-/*!*********************************!*\
-  !*** ./src/chatClient/index.js ***!
-  \*********************************/
+/***/ "./src/chat-client/index.js":
+/*!**********************************!*\
+  !*** ./src/chat-client/index.js ***!
+  \**********************************/
 /***/ ((__unused_webpack_module, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -18174,7 +18174,11 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony import */ var tmi_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! tmi.js */ "./node_modules/tmi.js/index.js");
 /* harmony import */ var tmi_js__WEBPACK_IMPORTED_MODULE_0___default = /*#__PURE__*/__webpack_require__.n(tmi_js__WEBPACK_IMPORTED_MODULE_0__);
 /* harmony import */ var _llm_index_js__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! ../llm/index.js */ "./src/llm/index.js");
+/* harmony import */ var _data_copypasta_json__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(/*! ../data/copypasta.json */ "./src/data/copypasta.json");
+/* harmony import */ var _data_emotes_json__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(/*! ../data/emotes.json */ "./src/data/emotes.json");
  // Import tmi.js for Twitch chat handling
+
+
 
 const llm = new _llm_index_js__WEBPACK_IMPORTED_MODULE_1__["default"]();
 class ChatClient {
@@ -18209,15 +18213,21 @@ class ChatClient {
         channels: [channel]
       });
       this.twitchClient.connect();
-      this.twitchClient.on('message', (channel, tags, message, self) => {
+      this.twitchClient.on('message', async (channel, tags, message, self) => {
         if (self) return; // Ignore echoed messages
-        this.handleMessage({
-          user: tags['display-name'] || tags.username,
-          message,
-          platform: 'twitch',
-          tags,
-          subOnlyMode: this.subOnlyMode
-        });
+
+        const autoLabeledMessage = await this.autoLabelMessage(message, tags);
+        if (autoLabeledMessage) {
+          this.emit('message', autoLabeledMessage);
+        } else {
+          this.handleMessage({
+            user: tags['display-name'] || tags.username,
+            message,
+            platform: 'twitch',
+            tags,
+            subOnlyMode: this.subOnlyMode
+          });
+        }
       });
       this.twitchClient.on('roomstate', (channel, state) => {
         if ('subs-only' in state) {
@@ -18291,10 +18301,368 @@ class ChatClient {
     }
     this.emit('message', message);
   }
+  // Store long messages with timestamps for copypasta candidate detection
+  longMessageCandidates = new Map(); // messageText -> { count, firstSeen, lastSeen, timeoutId }
 
-  // Additional methods for handling chat messages, filtering, etc.
+  trackLongMessage(messageText) {
+    const now = Date.now();
+    const minLength = 200;
+    const repeatThreshold = 5; // times
+    const windowMs = 60 * 1000; // 1 minute
+
+    if (messageText.length < minLength) return;
+    let entry = this.longMessageCandidates.get(messageText);
+    if (!entry) {
+      // New candidate
+      entry = {
+        count: 1,
+        firstSeen: now,
+        lastSeen: now,
+        timeoutId: null
+      };
+      // Set up expiration
+      entry.timeoutId = setTimeout(() => {
+        this.longMessageCandidates.delete(messageText);
+      }, windowMs);
+      this.longMessageCandidates.set(messageText, entry);
+    } else {
+      // Existing candidate
+      entry.count += 1;
+      entry.lastSeen = now;
+      // Reset expiration
+      clearTimeout(entry.timeoutId);
+      entry.timeoutId = setTimeout(() => {
+        this.longMessageCandidates.delete(messageText);
+      }, windowMs);
+    }
+
+    // If threshold met within window, append as copypasta candidate to copypasta.json
+    if (entry.count >= repeatThreshold && entry.lastSeen - entry.firstSeen <= windowMs) {
+      chrome.storage.local.get({
+        copypastas: []
+      }, result => {
+        const localCopypastas = result.copypastas;
+        if (!localCopypastas.some(p => p.trim() === messageText.trim())) {
+          localCopypastas.push(messageText.trim());
+          chrome.storage.local.set({
+            copypastas: localCopypastas
+          });
+        }
+      });
+      clearTimeout(entry.timeoutId);
+      this.longMessageCandidates.delete(messageText);
+    }
+  }
+  conversationCache = new Map(); // user -> { lastMessage, timestamp }
+
+  expireConversations(windowMs = 2 * 60 * 1000) {
+    const now = Date.now();
+    for (const [user, data] of this.conversationCache.entries()) {
+      if (now - data.timestamp > windowMs) {
+        this.conversationCache.delete(user);
+      }
+    }
+  }
+  // Track multi-user conversation threads by topic or reply chain
+  conversationThreads = new Map(); // threadId -> { users: Set, messages: [{user, message, timestamp}], lastActive }
+
+  // Extracts a thread ID based on reply/mention or topic similarity
+  getThreadId(message, user) {
+    // If message contains @mentions, use the sorted set of users as thread ID
+    const mentions = Array.from(message.matchAll(/@(\w+)/g)).map(m => m[1].toLowerCase());
+    if (mentions.length > 0) {
+      // Include sender in thread
+      const threadUsers = Array.from(new Set([...mentions, user.toLowerCase()])).sort();
+      return threadUsers.join(',');
+    }
+    // Optionally, use message similarity for topic-based threads (simple hash)
+    // For now, fallback to user as thread
+    return user.toLowerCase();
+  }
+
+  // Returns true if message is part of an active multi-user conversation thread
+  isMultiUserConversation(message, user) {
+    const threadId = this.getThreadId(message, user);
+    const now = Date.now();
+    const windowMs = 2 * 60 * 1000;
+    let thread = this.conversationThreads.get(threadId);
+    if (!thread) {
+      // New thread
+      thread = {
+        users: new Set([user.toLowerCase()]),
+        messages: [{
+          user,
+          message,
+          timestamp: now
+        }],
+        lastActive: now
+      };
+      this.conversationThreads.set(threadId, thread);
+      return false;
+    } else {
+      // Existing thread: update
+      thread.users.add(user.toLowerCase());
+      thread.messages.push({
+        user,
+        message,
+        timestamp: now
+      });
+      thread.lastActive = now;
+      // If more than one user and recent activity, consider it a conversation
+      if (thread.users.size > 1 && now - thread.messages[0].timestamp < windowMs) {
+        return true;
+      }
+      return false;
+    }
+  }
+
+  // Clean up old threads
+  expireConversationThreads(windowMs = 2 * 60 * 1000) {
+    const now = Date.now();
+    for (const [threadId, thread] of this.conversationThreads.entries()) {
+      if (now - thread.lastActive > windowMs) {
+        this.conversationThreads.delete(threadId);
+      }
+    }
+  }
+
+  // Improved isConversation: checks for reply/mention or message similarity
+  isConversation(message, user) {
+    this.expireConversations();
+    this.expireConversationThreads();
+
+    // Multi-user thread detection
+    if (this.isMultiUserConversation(message, user)) {
+      return true;
+    }
+
+    // Per-user fallback: require some similarity or reply/mention
+    const last = this.conversationCache.get(user);
+    if (last && Date.now() - last.timestamp < 2 * 60 * 1000) {
+      // Check for reply/mention
+      if (/@\w+/.test(message) || /@\w+/.test(last.lastMessage)) {
+        return true;
+      }
+      // Simple similarity: Jaccard index over words
+      const wordsA = new Set(message.toLowerCase().split(/\s+/));
+      const wordsB = new Set(last.lastMessage.toLowerCase().split(/\s+/));
+      const intersection = new Set([...wordsA].filter(x => wordsB.has(x)));
+      const union = new Set([...wordsA, ...wordsB]);
+      const similarity = intersection.size / union.size;
+      if (similarity > 0.5) {
+        return true;
+      }
+    }
+    // Update cache
+    this.conversationCache.set(user, {
+      lastMessage: message,
+      timestamp: Date.now()
+    });
+    return false;
+  }
+
+  // Call this in handleMessage for long messages
+  async handleMessage(message) {
+    this.chatMessages.push(message);
+
+    // Track message frequency
+    const msgText = message.message;
+    this.messageFrequency[msgText] = (this.messageFrequency[msgText] || 0) + 1;
+
+    // Track long message candidates
+    this.trackLongMessage(msgText);
+
+    // If message is frequent enough, cache its prediction
+    if (this.messageFrequency[msgText] >= this.frequencyThreshold && !this.predictionCache[msgText]) {
+      const predictions = await llm.callPredict(msgText);
+      this.predictionCache[msgText] = predictions;
+      message.predictions = predictions;
+    } else if (this.predictionCache[msgText]) {
+      message.predictions = this.predictionCache[msgText];
+    } else {
+      // Not frequent, get prediction as usual (not cached)
+      message.predictions = await llm.callPredict(msgText);
+    }
+    this.emit('message', message);
+  }
+  async autoLabelMessage(message, tags = {}) {
+    // Command detection (cheap: just check first char)
+    if (message.trim().startsWith('!')) {
+      return {
+        user: tags['display-name'] || tags.username,
+        message,
+        platform: this.platform,
+        tags,
+        subOnlyMode: this.subOnlyMode,
+        predictions: [{
+          sentiment: 'command_request',
+          score: 1
+        }]
+      };
+    }
+
+    // Numeric only (digits, dates, times, weights, measurements)
+    const numericOnly = /^[\d\s:\/\-.]+$/.test(message);
+    if (numericOnly) return {
+      user: tags['display-name'] || tags.username,
+      message,
+      platform: this.platform,
+      tags,
+      subOnlyMode: this.subOnlyMode,
+      predictions: [{
+        sentiment: 'answer',
+        score: 1
+      }]
+    };
+
+    // Link only
+    const linkOnly = /^(https?:\/\/[^\s]+)$/.test(message.trim());
+    if (linkOnly) return {
+      user: tags['display-name'] || tags.username,
+      message,
+      platform: this.platform,
+      tags,
+      subOnlyMode: this.subOnlyMode,
+      predictions: [{
+        sentiment: 'conversation',
+        score: 1
+      }]
+    };
+
+    // @mention only
+    const mentionOnly = /^@\w+$/.test(message.trim());
+    if (mentionOnly) return {
+      user: tags['display-name'] || tags.username,
+      message,
+      platform: this.platform,
+      tags,
+      subOnlyMode: this.subOnlyMode,
+      predictions: [{
+        sentiment: 'conversation',
+        score: 1
+      }]
+    };
+
+    // Conversation tracking (messages containing @username)
+    if (/@\w+/.test(message)) {
+      return {
+        user: tags['display-name'] || tags.username,
+        message,
+        platform: this.platform,
+        tags,
+        subOnlyMode: this.subOnlyMode,
+        predictions: [{
+          sentiment: 'conversation',
+          score: 1
+        }]
+      };
+    }
+
+    // Emote only (Twitch emotes or common emotes)
+    // Simple heuristic: all words are emotes (no alphanumerics except emote names)
+    // Twitch emotes are in tags.emotes, or fallback to a basic regex for global emotes
+    // Use emotes from emotes.json for fallback detection
+    // All camelCase, lowerCamelCase, or ALLUPPERCASE words with no spaces are emotes
+    const words = message.trim().split(/\s+/);
+    // Enhanced emote spam detection: allow trailing numbers and ALLUPPERCASE
+    if (words.length > 0 && words.every(word => /^[A-Z][a-z]+(?:[A-Z][a-z]+)+\d*$/.test(word) ||
+    // CamelCase + optional digits
+    /^[a-z]+(?:[A-Z][a-z]+)+\d*$/.test(word) ||
+    // lowerCamelCase + optional digits
+    /^[A-Z]{8,}$/.test(word) && !/\s/.test(word) ||
+    // ALLUPPERCASE, 8+ chars, no spaces
+    /^[a-z]+[A-Z][a-z]+\d*$/.test(word) ||
+    // dsaRaid style: lowercase(s) + Uppercase + lowercase(s) + optional digits
+    /^[a-z]+[A-Z]+\d*$/.test(word) // dsaRaid style: lowercase(s) + Uppercase(s) + optional digits
+    )) {
+      return {
+        user: tags['display-name'] || tags.username,
+        message,
+        platform: this.platform,
+        tags,
+        subOnlyMode: this.subOnlyMode,
+        predictions: [{
+          sentiment: 'emote_spam',
+          score: 1
+        }]
+      };
+    } else {
+      // Fallback: check if all words are in emotes.json list
+      const emoteList = _data_emotes_json__WEBPACK_IMPORTED_MODULE_3__.emotes || [];
+      if (words.length > 0 && words.every(word => emoteList.includes(word))) {
+        return {
+          user: tags['display-name'] || tags.username,
+          message,
+          platform: this.platform,
+          tags,
+          subOnlyMode: this.subOnlyMode,
+          predictions: [{
+            sentiment: 'emote_spam',
+            score: 1
+          }]
+        };
+      }
+    }
+
+    // Copypasta detection (compare to known list from copypasta.json)
+    let knownCopypastas = _data_copypasta_json__WEBPACK_IMPORTED_MODULE_2__.copypastas.map(pasta => pasta.text.trim());
+    const localCopypastas = JSON.parse(localStorage.getItem('copypastas') || '[]');
+    knownCopypastas = [...new Set([...knownCopypastas, ...localCopypastas])];
+    if (knownCopypastas.some(pasta => message.trim() === pasta)) {
+      return {
+        user: tags['display-name'] || tags.username,
+        message,
+        platform: this.platform,
+        tags,
+        subOnlyMode: this.subOnlyMode,
+        predictions: [{
+          sentiment: 'copypasta',
+          score: 1
+        }]
+      };
+    }
+
+    // Conversation cache check (expensive, so last)
+    const user = tags['display-name'] || tags.username;
+    if (this.isConversation(message, user)) {
+      return {
+        user,
+        message,
+        platform: this.platform,
+        tags,
+        subOnlyMode: this.subOnlyMode,
+        predictions: [{
+          sentiment: 'conversation',
+          score: 1
+        }]
+      };
+    }
+    return null; // No auto-labeling matched
+  }
 }
 /* harmony default export */ const __WEBPACK_DEFAULT_EXPORT__ = (ChatClient);
+
+/***/ }),
+
+/***/ "./src/data/copypasta.json":
+/*!*********************************!*\
+  !*** ./src/data/copypasta.json ***!
+  \*********************************/
+/***/ ((module) => {
+
+"use strict";
+module.exports = /*#__PURE__*/JSON.parse('{"copypastas":[{"title":"Navy Seal","text":"What the heck did you just say about me, you little punk? I\'ll have you know I graduated top of my class in the Navy Seals, and I\'ve been involved in numerous secret raids on Al-Quaeda, and I have over 300 confirmed kills. I am trained in gorilla warfare and I\'m the top sniper in the entire US armed forces. You are nothing to me but just another target. I will wipe you out with precision the likes of which has never been seen before on this Earth, mark my words..."},{"title":"Bee Movie Script","text":"According to all known laws of aviation, there is no way a bee should be able to fly. Its wings are too small to get its fat little body off the ground. The bee, of course, flies anyway because bees don\'t care what humans think is impossible. Yellow, black. Yellow, black. Yellow, black. Yellow, black. Ooh, black and yellow! Let\'s shake it up a little. Barry! Breakfast is ready! Ooming! Hang on a second. Hello? Barry? Adam? Can you believe this is happening?..."},{"title":"Lorem Ipsum","text":"Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur..."},{"title":"UwU","text":"OwO what\'s this? *notices bulge* OwO! You have a wittle situation down there~ *giggles and pounces on you* you naughty wittle puppy~ *nuzzles ur chest* does someone need their belly rubbed~?"},{"title":"Long Text Chain","text":"This is a very long copypasta. If you read this, you have been blessed with good luck for the next 24 hours. Pass this on to 5 friends or your luck will run out. This isn’t a joke. Just do it. I didn\'t believe it either until I read the story of Kayla who ignored this message and her dog exploded. Do you want your dog to explode? Didn’t think so. Pass it on. Now."},{"title":"Twitch Worry","text":"Hey guys, I don’t know if I’ll be able to keep watching the stream. My mom said if I don’t stop typing weird frog faces in chat she’s taking away the Wi-Fi. She already deleted my Discord and said I have to go outside. I’m scared. Please spam PepeHands so she understands it’s a real problem."},{"title":"Coomer Copypasta","text":"POV: You just coomed. You’re sitting in your crusty gamer chair. Hands still sticky, you look around. The GFuel is half-empty. Your anime body pillow is judging you. Your tabs are open—shameful, degenerate content. Your mom knocks: \'Dinner\'s ready.\' You whisper, \'Give me 5 more minutes.\' You lie. You\'re already done. You feel nothing. No dopamine, no serotonin. Just the crushing weight of your post-nut clarity. You’ll do it again tomorrow. You are the Coomer."},{"title":"Sigma Male Grindset","text":"I wake up at 4AM. I eat a raw onion. I run 10 miles in the snow barefoot. I scream at the sun. I trade crypto during my squats. I don\'t date. I don\'t party. I don’t even blink. I cold email Jeff Bezos for fun. I drink my protein powder dry. I am not alpha. I am not beta. I am the lone wolf. The sigma male."},{"title":"Steam Sale Struggle","text":"I have 234 games in my Steam library. I have played 12. I just bought 8 more on sale. I don’t know why. I tell myself I’ll play them someday. But I never do. I just keep scrolling. Watching trailers. Clicking \'Add to Cart\'. My backlog grows. My shame grows. But the deals... the deals are too good."},{"title":"Amogus","text":"When the impostor is sus 😳😳😳💦💦💦 AMOGUS AMOGUS AMOGUS. You’re walking in electrical and BAM—dead body. Red is standing over it. He says it wasn’t him. But it was. You know it. He self-reported. Sussy baka. Emergency meeting."},{"title":"Skyrim Sweetroll","text":"Let me guess... someone stole your sweetroll. You used to be an adventurer like me, but then you took an arrow to the knee. The guards of Skyrim never change. They’ll talk about their cousins out fighting dragons while I’m here dealing with your nonsense. Move along, citizen."},{"title":"Chad vs Virgin Viewer","text":"The Virgin viewer: lowercase username, uses one emote at a time, types \'lol\' once every 30 minutes. Lurks 99% of the stream. Never subs. The Chad chatter: ALL CAPS USERNAME, uses 7 emotes per message, initiates HYPE TRAIN, types \'LET’S GOOOOOO\' at the slightest excitement. Gifts 10 subs randomly. Starts copypastas. Gets noticed by the streamer. Is the moment."},{"title":"Twitch Mod Abuse","text":"Imagine being a Twitch mod. Power tripping over a bunch of degenerate chatters. You ban someone and feel like a god. Go touch grass, Kevin. You’re not special. You’re a glorified hall monitor."},{"title":"Touch Grass","text":"Bro, log off. Go outside. Touch grass. Breathe real air. You\'re arguing with anime profile pics at 3AM. You\'re not winning. You\'re not enlightened. You\'re just loud and wrong."},{"title":"Daddy Chill","text":"Daddy chill 😳👉👈 what the hell even is that 😡 get out of my stream you little freak 😭"},{"title":"Down Bad","text":"Bro is down bad. He saw a pixelated woman and started barking. Calm down, she’s not gonna notice you. Go drink water. Do a push-up. Regain dignity."},{"title":"Gooning","text":"The lights are off. The screen glows. You\'ve been gooning for 6 hours. Your hand is numb. You\'re moaning to a VTuber. You forgot to eat. You forgot your name. You are lost in the sauce."},{"title":"Step Sis Help","text":"Step bro... I’m stuck 😳 Can you help me? 😏 Oh no... my hand is in the jar again... what are you gonna do about it? 😩👉👌"},{"title":"Femboy Friday","text":"IT’S FEMBOY FRIDAY 😩💦 time to put on the thigh highs and disappoint my father 😎"},{"title":"Ratio + L + You Fell Off","text":"Ratio + L + You fell off + Your mom doesn’t love you + Unsubbed + Blocked + Reported + Cringe + Didn’t ask + You’re poor + Stay mad"},{"title":"Fake Deep","text":"We live in a society. Everyone wears masks. But the real mask is the one we hide behind while pretending to be okay. Pain is temporary. But Minecraft is forever."},{"title":"Sub Beggar","text":"Bro please just 1 gifted sub 😭😭 I’ll be your little meow meow 😔 I’ll never ask again 🥺 just 1 sub pls 🐾"},{"title":"Sigma Cope","text":"Cope. Seethe. Mald. Cry about it. Grow a spine. Touch grass. Get better. Skill issue. I win. You lose. Stay mad."},{"title":"Spamming Emotes","text":"OMEGALUL OMEGALUL OMEGALUL OMEGALUL OMEGALUL OMEGALUL OMEGALUL OMEGALUL OMEGALUL OMEGALUL OMEGALUL"},{"title":"My Queen","text":"M’lady, you are the most radiant being I have ever laid eyes upon. I would defend your honor in any battle. Please, accept this Twitch Prime sub as a token of my affection."},{"title":"Toes","text":"Lemme see them piggies 😩 I need those toes fr 😳 you got them grippers out on stream like that? Lawd have mercy 💦"},{"title":"Certified Twitch Weirdo","text":"Hello, beautiful streamer 🥺 I just wanted to say your voice soothes my depression. I made you in The Sims and we’re married. Please respond. I think about you all day. This isn’t parasocial. It’s real."},{"title":"Twitch Donowall","text":"Hey streamer, I’ve been watching you for 6 years. I was there when your dog died, I was there when your sub button got approved. I’ve never missed a stream. I’ve donated every month. But you don’t read my messages. I typed \'hi\' 3 times. You read the guy who said \'balls\'. I guess I’m not funny enough. Goodbye."},{"title":"Streamer Betrayal","text":"Wow. I can\'t believe this. After all we\'ve been through, you go and do this. I watched you when you had 12 viewers. I defended you in Discord arguments. I called you the next xQc. And this is how you repay me? No VIP? No response to my message? You’ve changed, man. You’ve let the fame get to your head. Unbelievable."},{"title":"Youtube Timestamp Lord","text":"Here’s a full timestamp breakdown for everyone because I’m built different. 0:00 Intro, 0:45 The Fall of the Channel, 3:21 The Beef Starts, 5:40 Drama Explained, 9:11 Apology Begins, 12:00 Real Tears?, 14:32 Manipulation Arc, 17:00 Fake Crying?, 20:01 Chat Reacts, 22:55 Final Words. You’re welcome. No one appreciates me. Like the comment if you use it."},{"title":"Viewer Coping","text":"I’m not mad. I’m just disappointed. I used to look up to you. You were different. You weren’t like the other streamers. But now? Now you just watch YouTube videos and go \'true\' every 5 minutes. You’re just like them. You sold out. I miss the old you. The guy who would rage at Minecraft and scream at chat. You’ve lost your edge."},{"title":"My Queen","text":"Dear beautiful streamer girl, I hope you’re having a wonderful day. I just wanted to let you know that your presence brightens my life like no one else’s. I’ve watched every VOD, I even made a fan cam. I may not be a sub, but I’m there for you emotionally. Please say my name on stream. It would mean the world. Love, your biggest fan."},{"title":"The Downfall of Chat","text":"Chat used to be a sacred place. A brotherhood. An elite squad of warriors. We posted KEKW with purpose. We rallied with POGGERS when hype struck. But now? Now it’s just spam. People typing \'ratio\' and \'L\' like they mean something. This isn’t the chat I fought for. This isn’t the emote haven I defended. This chat… is lost."},{"title":"Fake Apology","text":"Hey guys… I just wanted to say I’m sorry. I never meant to offend anyone. When I said all chatters are brain-dead mouth breathers who couldn’t spell if their life depended on it, I was joking. I didn’t think anyone would take it seriously. I love chat. Even the dumb ones. Please forgive me. This isn’t who I am. I’ve learned. I’ll grow. (probably not)"},{"title":"Ligma Copypasta","text":"Ever since the ligma outbreak hit my village, things haven’t been the same. My dog caught it first. Then my uncle. Now the frogs in chat are saying it’s not real. But I know. I’ve seen it. I watched someone type \'Sugma balls\' and disappear forever. Stay safe. Don’t Google it. God help us all."},{"title":"I Just Wanted to Watch","text":"I came here to relax. To watch my favorite streamer and forget about my problems. But instead, I was called a \'cringe chatter\'. They spammed L when I said hi. They told me to ratio myself. I’m just a guy. A guy who wanted to enjoy a stream. Now I’m questioning everything. Was I the problem? Or is chat just evil?"},{"title":"VTuber Degeneracy","text":"It\'s 3am. The room is dark. A faint glow from the monitor illuminates your face. You haven’t showered. You haven’t eaten. But you’re still here. Still watching your anime fox girl say \'nya~\' for the 12th time. Your family has stopped asking. You’ve accepted it. You are no longer a man. You are a VTuber simp. And you’re proud."}]}');
+
+/***/ }),
+
+/***/ "./src/data/emotes.json":
+/*!******************************!*\
+  !*** ./src/data/emotes.json ***!
+  \******************************/
+/***/ ((module) => {
+
+"use strict";
+module.exports = /*#__PURE__*/JSON.parse('{"emotes":[":)",":(","Kappa","PogChamp","LUL","OMEGALUL","FeelsBadMan","FeelsGoodMan","PepeHands","BibleThump","4Head","cmonBruh","monkaS","monkaW","Pog","KEKW","Sadge","Pepega","PepeLaugh","PepeD","PepeJAM","PepePls","PepegaPls","PepePoint","PepeOK","PepeThink","PepeClap","PepeCry","PepeGun","PepeSweat","PepeWut","PepeYay","PepeZ","PepegaAim","PepegaChat","PepegaGun","PepegaMusic","PepegaPhone","PepegaSad","PepegaSleep","PepegaSmile","PepegaWow","PepegaYes","PepegaNo","PepegaLove","PepegaHug","PepegaHi","PepegaBye","PepegaCool","PepegaAngry","PepegaHappy","PepegaDance","PepegaParty","PepegaWave","PepegaClap","PepegaThink","PepegaPoint","PepegaOK","PepegaCry","PepegaGun","PepegaSweat","PepegaWut","PepegaYay","PepegaZ","TriHard","PJSalt","Kreygasm","ResidentSleeper","NotLikeThis","VoHiYo","HeyGuys","CoolStoryBob","DansGame","MingLee","SMOrc","Jebaited","SwiftRage","BabyRage","WutFace","KappaPride","KappaRoss","KappaClaus","KappaWealth","KappaHD","Kappa123","PogU","POGGERS","EZ","gachiGASM","monkaGIGA","monkaOMEGA","monkaThink","monkaEyes","monkaHmm","monkaGun","monkaLaugh","monkaH","monkaOMEGA","monkaX","monkaBan","monkaTOS","monkaOMEGA","monkaWTF","monkaOMEGALUL","monkaOMEGAD","monkaOMEGAS","monkaOMEGAPOG","monkaOMEGAPOGGERS","monkaOMEGAPOGU","monkaOMEGAPOGGIES","monkaOMEGAPOGCHAMP","monkaOMEGAPOGU","monkaOMEGAPOGGERS","monkaOMEGAPOGU","monkaOMEGAPOGGERS","monkaOMEGAPOGU","monkaOMEGAPOGGERS","monkaOMEGAPOGU","monkaOMEGAPOGGERS"]}');
 
 /***/ }),
 
@@ -18328,25 +18696,25 @@ const sentiment_to_label = {
   "sad": 6,
   // 😢 Expresses disappointment, loss, or empathy
   "hype": 7,
-  // 🚀 Excited cheering or support (e.g. "LETS GOOO")
+  // 🔥 Excited cheering or support (e.g. "LETS GOOO")
   "agreeable": 8,
   // 👍 Signals agreement, like "yep", "true", "based"
   "supportive": 9,
   // 🤗 Deeply affirming, emotionally positive
   "playful": 10,
-  // 🎈 Silly, teasing, or lighthearted tone
+  // 😜 Silly, teasing, or lighthearted tone
   "reaction": 11,
-  // 🧵 General expressive response to events
+  // 😲 General expressive response to events
 
   // 🎭 Expression style / delivery
   "sarcasm": 12,
-  // 🙃 Ironic, saying the opposite of what's meant
+  // 😏 Ironic, saying the opposite of what's meant
   "humor": 13,
   // 😂 Light-hearted humor, not mocking
   "copypasta": 14,
   // 📋 Repeated or meme block text
   "emote_spam": 15,
-  // 💬 Emote-only or excessive emotes
+  // 🤪 Emote-only or excessive emotes
   "bait": 16,
   // 🎣 Provocative to stir a reaction
   "mocking": 17,
@@ -18357,43 +18725,46 @@ const sentiment_to_label = {
   // ❓ Intent or purpose of message
   "question": 19,
   // ❓ Seeking info, asking streamer or chat
-  "command_request": 20,
-  // 📝 Suggesting actions ("play X", "go here")
-  "insightful": 21,
+  "joke": 20,
+  // 😂 Joke or kidding tone
+
+  "command_request": 21,
+  // ❗ Suggesting actions ("play X", "go here")
+  "insightful": 22,
   // 💡 Adds valuable knowledge or perspective
-  "meta": 22,
+  "meta": 23,
   // 🧠 Commentary about chat or the stream itself
-  "criticism": 23,
+  "criticism": 24,
   // 🧐 Disapproval or critique, non-toxic
 
   // 🧩 Add-on specialized classes
-  "backseat": 24,
+  "backseat": 25,
   // 🪑 Telling the streamer how to play
-  "fan_theory": 25,
+  "fan_theory": 26,
   // 🧩 Lore speculation or plot guessing
-  "personal_story": 26,
+  "personal_story": 27,
   // 📖 Sharing personal anecdotes to relate
 
   // 🧠 Fine-grained interaction labels
-  "commentary": 27,
+  "commentary": 28,
   // 🗣️ Observational, running commentary
-  "affirmative": 28,
+  "affirmative": 29,
   // ✅ Confirming message ("true", "yep", etc)
-  "compliment": 29,
-  // 🌟 Direct praise or flattery
+  "compliment": 30,
+  // 🥰 Direct praise or flattery
 
   // Additional mappings
-  "mixed": 30,
+  "mixed": 31,
   // 🤔 Mixed sentiment
-  "happy": 31,
+  "happy": 32,
   // 😄 Happy
-  "surprised": 32,
+  "surprised": 33,
   // 😲 Surprised
-  "fear": 33,
+  "fear": 34,
   // 😱 Fear
-  "conversation": 34,
-  // 🧵 Conversation
-  "default": 35 // 💬 Default/unspecified
+  "conversation": 35,
+  // 💬 Conversation
+  "default": 36 // 💬 Default/unspecified
 };
 class LLMService {
   constructor(apiUrl) {
@@ -18442,6 +18813,61 @@ class LLMService {
   }
 }
 /* harmony default export */ const __WEBPACK_DEFAULT_EXPORT__ = (LLMService);
+
+/***/ }),
+
+/***/ "./src/summary-client/index.js":
+/*!*************************************!*\
+  !*** ./src/summary-client/index.js ***!
+  \*************************************/
+/***/ ((__unused_webpack_module, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   "default": () => (__WEBPACK_DEFAULT_EXPORT__)
+/* harmony export */ });
+class SummaryClient {
+  constructor(options = {}) {
+    //TODO: establish LM port for the sentiment analysis service and pass it to the constructor of the LLMService
+    this.endpoint = options.endpoint || 'http://localhost:5223/summarize';
+    this.apiKey = options.apiKey || null;
+    this.model = options.model || 'summary-llm';
+  }
+
+  /**
+   * Sends a window of chat messages (with predictions) to the summarizer LLM.
+   * @param {Array} messageWindow - Array of chat message objects, each with predictions.
+   * @param {Object} [meta] - Optional metadata (e.g., time window, channel info).
+   * @returns {Promise<Object>} - The summary result.
+   */
+  async summarizeWindow(messageWindow, meta = {}) {
+    // Prepare payload
+    const payload = {
+      messages: messageWindow,
+      meta,
+      model: this.model
+    };
+
+    // Send to LLM endpoint (adjust for your backend)
+    const response = await fetch(this.endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(this.apiKey ? {
+          'Authorization': `Bearer ${this.apiKey}`
+        } : {})
+      },
+      body: JSON.stringify(payload)
+    });
+    if (!response.ok) {
+      throw new Error(`Summary LLM error: ${response.statusText}`);
+    }
+    const result = await response.json();
+    return result;
+  }
+}
+/* harmony default export */ const __WEBPACK_DEFAULT_EXPORT__ = (SummaryClient);
 
 /***/ }),
 
@@ -18558,30 +18984,34 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export */   sentimentEmojis: () => (/* binding */ sentimentEmojis)
 /* harmony export */ });
 /* harmony import */ var chart_js_auto__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! chart.js/auto */ "./node_modules/chart.js/auto/auto.js");
-/* harmony import */ var _src_chatClient_index_js__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! ../src/chatClient/index.js */ "./src/chatClient/index.js");
+/* harmony import */ var _src_chat_client_index_js__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! ../src/chat-client/index.js */ "./src/chat-client/index.js");
+/* harmony import */ var _src_summary_client_index_js__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(/*! ../src/summary-client/index.js */ "./src/summary-client/index.js");
+
+
 
 const sentimentEmojis = {
   positive: '😊',
   negative: '😠',
   neutral: '😐',
-  toxic: '☣️',
+  toxic: '☠️',
   confused: '😕',
   angry: '😡',
   sad: '😢',
-  hype: '🚀',
+  hype: '🔥',
   agreeable: '👍',
   supportive: '🤗',
   playful: '😜',
   reaction: '😲',
-  sarcasm: '🙃',
+  sarcasm: '😏',
   humor: '😂',
+  joke: '😂',
   copypasta: '📋',
   emote_spam: '🤪',
   bait: '🎣',
   mocking: '😏',
   cringe: '😬',
   question: '❓',
-  command_request: '📝',
+  command_request: '❗',
   insightful: '💡',
   meta: '🧠',
   criticism: '🧐',
@@ -18590,7 +19020,7 @@ const sentimentEmojis = {
   personal_story: '📖',
   commentary: '🗣️',
   affirmative: '✅',
-  compliment: '🌟',
+  compliment: '🥰',
   mixed: '🤔',
   happy: '😄',
   surprised: '😮',
@@ -18615,6 +19045,7 @@ const sentimentColorPalette = {
   reaction: '#00BFAE',
   sarcasm: '#FFB300',
   humor: '#FDD835',
+  joke: '#FF7043',
   copypasta: '#FF7043',
   emote_spam: '#29B6F6',
   bait: '#FF8A65',
@@ -18694,9 +19125,6 @@ updateBarChart.peakStddev = parseFloat(stddevInput.value);
 stddevControlContainer.appendChild(stddevLabel);
 stddevControlContainer.appendChild(stddevInput);
 stddevControlContainer.appendChild(stddevValue);
-
-// Insert before popout/minimize/expand buttons, after timeFrameRadios
-
 const popoutButton = document.createElement('button');
 popoutButton.textContent = '⧉';
 popoutButton.title = 'Pop out overlay';
@@ -18829,10 +19257,12 @@ expandButton.style.top = '10px';
 expandButton.style.right = '10px';
 expandButton.style.zIndex = '10002';
 expandButton.style.display = 'none';
+
 // Move button creation here so they're not appended directly to overlayContainer
 buttonBar.appendChild(stddevControlContainer);
 buttonBar.appendChild(popoutButton);
 buttonBar.appendChild(minimizeButton);
+
 // This file injects overlay/UI elements into Twitch and YouTube pages, allowing real-time monitoring and interaction with live chats.
 // Only create the overlay if it doesn't already exist
 let overlayContainer = document.getElementById('hivemind-overlay');
@@ -18850,7 +19280,7 @@ if (!overlayContainer) {
   overlayContainer.style.zIndex = '9999';
   overlayContainer.style.maxHeight = 'calc(100vh - 30px)'; // 10px top + 20px bottom
   overlayContainer.style.overflowY = 'scroll';
-  overlayContainer.style.width = '1000px';
+  overlayContainer.style.width = '100%';
   overlayContainer.style.fontFamily = 'Arial, sans-serif';
   overlayContainer.style.fontSize = '14px';
   document.body.appendChild(overlayContainer);
@@ -18875,8 +19305,6 @@ const movementArrowList = document.createElement('ol');
 movementArrowList.id = 'sentiment-ranking';
 movementArrowList.style.margin = '0';
 movementArrowList.style.listStyle = 'decimal';
-// Ensure sentimentSummaryContainer is always inside overlayContainer
-
 popoutButton.addEventListener('click', () => {
   const popout = window.open(chrome.runtime.getURL('popout.html'), 'HivemindOverlayPopout', 'width=850,height=700,resizable,scrollbars');
   const sendOverlay = () => {
@@ -18911,7 +19339,20 @@ expandButton.addEventListener('click', () => {
   overlayContainer.style.display = 'block';
   expandButton.style.display = 'none';
 });
+const radarIframe = document.createElement('iframe');
+radarIframe.src = chrome.runtime.getURL('emotion-radar.html');
+radarIframe.style.width = '300px';
+radarIframe.style.height = '300px';
+radarIframe.style.border = 'none';
+radarIframe.style.position = 'absolute';
+radarIframe.style.right = '0';
+radarIframe.style.background = 'transparent';
+radarIframe.style.overflow = 'hidden';
+radarIframe.scrolling = 'no';
+radarIframe.setAttribute('scrolling', 'no');
+radarIframe.allowTransparency = 'true';
 overlayContainer.appendChild(sentimentSummaryContainer);
+
 // --- Chat Volume Slider & Bar Chart ---
 
 // Container for slider and bar chart
@@ -19051,30 +19492,15 @@ timelineContainer.style.color = '#bbb';
 timelineContainer.style.marginTop = '-2px'; // Adjust as needed
 
 sliderBarContainer.appendChild(timelineContainer);
+const mediaEmbedRowContainer = document.createElement('div');
+mediaEmbedRowContainer.style.display = 'flex';
+mediaEmbedRowContainer.style.flexDirection = 'row';
+mediaEmbedRowContainer.style.alignItems = 'center';
+mediaEmbedRowContainer.style.width = '100%';
+sliderBarContainer.appendChild(mediaEmbedRowContainer);
 const chatBuffer = [];
 const MAX_BUFFER_SECONDS = timeFrames[timeFrames.length - 1].value; // 24h (86400 seconds)
 let windowMessages = [];
-function bufferMessage(message) {
-  chatBuffer.push({
-    ...message,
-    ts: Date.now()
-  });
-  // Remove old messages
-  const cutoff = Date.now() - MAX_BUFFER_SECONDS * 1000;
-  while (chatBuffer.length && chatBuffer[0].ts < cutoff) {
-    chatBuffer.shift();
-  }
-}
-/**
- * Adjust the timeSlider so that its range always matches the selectedTimeFrame.
- * The slider's left (0) is the oldest point in the buffer that still covers the selectedTimeFrame,
- * and right (99) is "now".
- * When the time frame changes, reset the slider to "now".
- */
-function adjustTimeSliderForTimeFrame() {
-  // Always keep slider at "now" when time frame changes
-  timeSlider.value = 99;
-}
 timeFrameRadios.querySelectorAll('input[type=radio]').forEach(radio => {
   radio.addEventListener('change', adjustTimeSliderForTimeFrame);
 });
@@ -19171,279 +19597,9 @@ timeSlider.addEventListener('input', () => {
   updateSliderTicks();
   updateBarChart(); // Optionally update bar chart to reflect new window
   updateTimelineLabels();
+  updateEmbedsForWindow();
 });
 updateTimelineLabels();
-
-// --- Chart.js Pie Chart Setup (make sure Chart.js is loaded in your extension) ---
-let toggledSentiments = new Set();
-let pieChart;
-function updatePieChart(sentimentCounts) {
-  // Sort sentimentCounts by count descending
-  const sortedEntries = Object.entries(sentimentCounts).sort((a, b) => b[1] - a[1]);
-  const labels = sortedEntries.map(([sentiment, count]) => {
-    const emoji = sentimentEmojis[sentiment] || sentimentEmojis.default;
-    return `${emoji} ${sentiment} (${count})`;
-  });
-  const data = sortedEntries.map(([, count]) => count);
-  const sentiments = sortedEntries.map(([sentiment]) => sentiment);
-  const backgroundColors = sentiments.map(sentiment => sentimentColorPalette[sentiment.trim().toLowerCase()] || sentimentColorPalette.default);
-  if (!pieChart) {
-    const ctx = pieCanvas.getContext('2d');
-    pieChart = new chart_js_auto__WEBPACK_IMPORTED_MODULE_0__["default"](ctx, {
-      type: 'pie',
-      data: {
-        labels: labels,
-        // Slice labels
-        datasets: [{
-          data: data,
-          backgroundColor: backgroundColors
-        }]
-      },
-      options: {
-        responsive: false,
-        maintainAspectRatio: false,
-        plugins: {
-          legend: {
-            display: true,
-            position: 'right',
-            labels: {
-              generateLabels: function (chart) {
-                const data = chart.data;
-                if (data.labels.length && data.datasets.length) {
-                  return data.labels.map((label, i) => ({
-                    text: label,
-                    fontColor: '#fff',
-                    color: '#fff',
-                    fillStyle: data.datasets[0].backgroundColor[i],
-                    hidden: chart.getDatasetMeta(0).data[i].hidden,
-                    index: i,
-                    datasetIndex: 0 // Important for onClick!
-                  }));
-                }
-                return [];
-              }
-            },
-            onClick: function (e, legendItem, legend) {
-              // Double-click detection
-              // If double-clicked on the same legend item within threshold, toggle ONLY this sentiment,
-              // or if already only this sentiment is visible, restore all (undo)
-
-              if (!legendClickState.lastClickTime) legendClickState.lastClickTime = 0;
-              if (legendClickState.lastClickIndex === undefined || legendClickState.lastClickIndex === null) legendClickState.lastClickIndex = -1;
-              const now = Date.now();
-              const DOUBLE_CLICK_MS = 500;
-              const chart = legend.chart;
-              const index = legendItem.index;
-              const sentiment = chart.data.labels[index].replace(/^[^\w]+/, '') // Remove leading emoji and spaces
-              .replace(/\s*\(\d+\)$/, '') // Remove trailing (count)
-              .trim().toLowerCase();
-              if (legendClickState.lastClickIndex === index && now - legendClickState.lastClickTime < DOUBLE_CLICK_MS) {
-                // If only this sentiment is visible (all others hidden), restore all
-                if (toggledSentiments.size === chart.data.labels.length - 1 && !toggledSentiments.has(sentiment)) {
-                  toggledSentiments.clear();
-                } else if (toggledSentiments.size === chart.data.labels.length - 1 && toggledSentiments.has(sentiment)) {
-                  // If this sentiment is the only one hidden, restore all
-                  toggledSentiments.clear();
-                } else {
-                  // Hide all except this sentiment
-                  toggledSentiments = new Set(chart.data.labels.map(l => l.replace(/\s*\(\d+\)$/, '').trim().toLowerCase()).filter(s => s !== sentiment));
-                }
-              } else {
-                // Normal single click: toggle this sentiment
-                if (toggledSentiments.has(sentiment)) {
-                  toggledSentiments.delete(sentiment);
-                } else {
-                  toggledSentiments.add(sentiment);
-                }
-              }
-              legendClickState.lastClickTime = now;
-              legendClickState.lastClickIndex = index;
-
-              // After toggling, update all slices' hidden state based on sentiment key
-              const meta = chart.getDatasetMeta(legendItem.datasetIndex);
-              meta.data.forEach((slice, i) => {
-                const sliceSentiment = pieChart.data.labels[i].replace(/^[^\w]+/, '') // Remove leading emoji and spaces
-                .replace(/\s*\(\d+\)$/, '') // Remove trailing (count)
-                .trim().toLowerCase();
-                slice.hidden = toggledSentiments.has(sliceSentiment);
-              });
-              chart.update();
-              const messagesContainer = document.getElementById('hivemind-messages');
-              if (messagesContainer) {
-                messagesContainer.innerHTML = '';
-                windowMessages.forEach(msg => {
-                  if (msg.predictions.some(pred => toggledSentiments.has(pred.sentiment))) return;
-                  // Use the helper function to render the message element without side effects
-                  const messageElement = renderMessageElement(msg);
-                  messagesContainer.appendChild(messageElement);
-                });
-              }
-              updateBarChart(); // Update bar chart to reflect new sentiment visibility
-            }
-          }
-        }
-      }
-    });
-  } else {
-    pieChart.data.labels = labels;
-    pieChart.data.datasets[0].data = data;
-    pieChart.data.datasets[0].backgroundColor = backgroundColors;
-
-    // After updating data, re-apply hidden state to slices
-    const meta = pieChart.getDatasetMeta(0);
-    meta.data.forEach((slice, i) => {
-      if (pieChart.data.labels[i] === undefined) {
-        return;
-      }
-      // Remove emoji and (#) from the label to get the sentiment key
-      const sliceSentiment = pieChart.data.labels[i].replace(/^[^\w]+/, '') // Remove leading emoji and spaces
-      .replace(/\s*\(\d+\)$/, '') // Remove trailing (count)
-      .trim().toLowerCase();
-      slice.hidden = toggledSentiments.has(sliceSentiment);
-    });
-    pieChart.update();
-    updateBarChart(); // Optionally update bar chart to reflect new window
-  }
-}
-function updateTimelineLabels() {
-  timelineContainer.innerHTML = '';
-  const tickCount = 8; // Match your sliderTicks
-  const value = parseInt(timeSlider.value, 10);
-  const bufferStart = chatBuffer.length ? chatBuffer[0].ts : Date.now();
-  const bufferEnd = chatBuffer.length ? chatBuffer[chatBuffer.length - 1].ts : Date.now();
-  const bufferDuration = bufferEnd - bufferStart;
-  const sliderFraction = value / 99;
-  const windowEnd = bufferStart + sliderFraction * bufferDuration;
-  const windowStart = windowEnd - selectedTimeFrame * 1000;
-  const interval = selectedTimeFrame / (tickCount - 1);
-  for (let i = 0; i < tickCount; i++) {
-    const tick = document.createElement('span');
-    tick.style.flex = '1 1 0';
-    tick.style.textAlign = 'center';
-    // Calculate timestamp for this tick
-    let secondsAgo = selectedTimeFrame - i * interval;
-    let ts = windowEnd - secondsAgo * 1000;
-    const date = new Date(ts);
-    // Format as HH:MM:SS or HH:MM
-    let label = date.toLocaleTimeString([], {
-      hour: '2-digit',
-      minute: '2-digit',
-      second: selectedTimeFrame < 3600 ? '2-digit' : undefined
-    });
-    tick.textContent = label;
-    timelineContainer.appendChild(tick);
-  }
-}
-
-// Function to update tick labels based on selectedTimeFrame
-function updateSliderTicks() {
-  sliderTicksContainer.innerHTML = '';
-  // Only show two ticks: left (limit) and right ("now")
-  const leftTick = document.createElement('span');
-  leftTick.style.flex = '1 1 0';
-  leftTick.style.textAlign = 'left';
-  // Format left label as mm:ss or h:mm:ss
-  let label;
-  if (selectedTimeFrame >= 3600) {
-    const h = Math.floor(selectedTimeFrame / 3600);
-    const m = Math.floor(selectedTimeFrame % 3600 / 60);
-    label = `${h}h${m > 0 ? m + 'm' : ''}`;
-  } else if (selectedTimeFrame >= 60) {
-    const m = Math.floor(selectedTimeFrame / 60);
-    const s = selectedTimeFrame % 60;
-    label = s === 0 ? `${m}m` : `${m}m${s}s`;
-  } else {
-    label = `${selectedTimeFrame}s`;
-  }
-  leftTick.textContent = label;
-  sliderTicksContainer.appendChild(leftTick);
-  const rightTick = document.createElement('span');
-  rightTick.style.flex = '1 1 0';
-  rightTick.style.textAlign = 'right';
-  rightTick.textContent = 'now';
-  sliderTicksContainer.appendChild(rightTick);
-}
-function updatePieChartForWindow() {
-  const now = Date.now();
-  const cutoff = now - selectedTimeFrame * 1000;
-  windowMessages = chatBuffer.filter(msg => msg.ts >= cutoff) || [];
-
-  // Aggregate sentiment counts in the window
-  const windowSentimentCounts = {};
-  windowMessages.forEach(msg => {
-    if (Array.isArray(msg.predictions)) {
-      msg.predictions.forEach(pred => {
-        windowSentimentCounts[pred.sentiment] = (windowSentimentCounts[pred.sentiment] || 0) + 1;
-      });
-    }
-  });
-  if (!chatPaused) updatePieChart(windowSentimentCounts);
-}
-
-// --- Ranking List with Up/Down Arrows ---
-let previousRanking = [];
-function updateRankingList(sortedSentiments) {
-  movementArrowList.innerHTML = '';
-  sortedSentiments.forEach((item, idx) => {
-    const li = document.createElement('li');
-    li.style.display = 'flex';
-    li.style.alignItems = 'center';
-    li.style.gap = '6px';
-    li.style.whiteSpace = 'nowrap'; // Prevent line break
-    li.style.overflow = 'hidden';
-    li.style.textOverflow = 'ellipsis';
-    li.style.maxWidth = '220px'; // Adjust as needed
-
-    // Arrow logic
-    const prevIdx = previousRanking.findIndex(s => s.sentiment === item.sentiment);
-    let arrow = '';
-    let arrowColor = '';
-    if (prevIdx !== -1) {
-      if (prevIdx > idx) {
-        arrow = '⬆︎';
-        arrowColor = 'green';
-      } else if (prevIdx < idx) {
-        arrow = '⬇︎';
-        arrowColor = 'red';
-      }
-    }
-    li.style.padding = '0.5px 0'; // Add vertical padding
-
-    // Arrow (if any)
-    if (arrow) {
-      const arrowSpan = document.createElement('span');
-      arrowSpan.textContent = arrow;
-      arrowSpan.style.color = arrowColor;
-      arrowSpan.style.fontWeight = 'bold';
-      arrowSpan.style.marginRight = '2px';
-      li.appendChild(arrowSpan);
-    }
-
-    //li.appendChild(sentimentLabel);
-    li.appendChild(document.createTextNode(' '));
-    movementArrowList.appendChild(li);
-  });
-  previousRanking = sortedSentiments.map(s => ({
-    ...s
-  })); // Deep copy
-}
-
-// --- Sentiment Data Aggregation Example ---
-const sentimentCounts = {};
-function aggregateSentiment(message) {
-  if (Array.isArray(message.predictions)) {
-    message.predictions.forEach(pred => {
-      sentimentCounts[pred.sentiment] = (sentimentCounts[pred.sentiment] || 0) + 1;
-    });
-    // Update UI
-    updatePieChartForWindow(); // Sort and update ranking
-    const sorted = Object.entries(sentimentCounts).map(([sentiment, count]) => ({
-      sentiment,
-      count
-    })).sort((a, b) => b.count - a.count);
-    //updateRankingList(sorted);
-  }
-}
 
 // Pie chart canvas
 const pieCanvas = document.createElement('canvas');
@@ -19460,26 +19616,264 @@ pieWrapper.style.overflow = 'hidden';
 pieWrapper.appendChild(pieCanvas);
 sentimentSummaryContainer.style.alignItems = 'center'; // helps vertically align
 sentimentSummaryContainer.appendChild(pieWrapper);
+sentimentSummaryContainer.appendChild(radarIframe);
 //sentimentSummaryContainer.appendChild(movementArrowList);
 
 let chatPaused = false;
-// stay scrolled to the bottom
-const scrollOverlayToBottom = () => {
+let windowEmbeds = [];
+function updateEmbedsForWindow() {
+  // Remove all current embeds
+  mediaEmbedRowContainer.innerHTML = '';
+  // Collect all unique URLs from messages in the current window
+  const urlSet = new Set();
+  windowMessages.forEach(msg => {
+    if (typeof msg.message === "string") {
+      const urlRegex = /(https?:\/\/[^\s]+)/g;
+      const urls = msg.message.match(urlRegex);
+      if (urls) {
+        urls.forEach(url => urlSet.add(url));
+      }
+    }
+  });
+  // Add embeds for all URLs in the window
+  if (urlSet.size > 0) {
+    addEmbedToOverlay(Array.from(urlSet));
+  }
+}
+const chatClient = new _src_chat_client_index_js__WEBPACK_IMPORTED_MODULE_1__["default"]('twitch'); // or 'youtube'
+chatClient.on('message', msg => {
+  aggregateSentiment(msg);
+  // If the message contains a URL for any type of media embed, add an embed to the UI
+  if (typeof msg.message === "string") {
+    const urlRegex = /(https?:\/\/[^\s]+)/g;
+    const urls = msg.message.match(urlRegex);
+    if (urls) {
+      addEmbedToOverlay(urls);
+    }
+    // Special handling for X/Twitter and Wikipedia links
+    urls && urls.forEach(url => {
+      // X/Twitter embed
+      if (/^(https?:\/\/)?(x\.com|twitter\.com)\/[^\/]+\/status\/\d+/i.test(url)) {
+        // Use publish.twitter.com embed
+        const tweetIdMatch = url.match(/status\/(\d+)/);
+        if (tweetIdMatch) {
+          const tweetId = tweetIdMatch[1];
+          const embedUrl = `https://twitframe.com/show?url=${encodeURIComponent(url)}`;
+          addEmbedToOverlay([embedUrl]);
+        }
+      }
+      // Wikipedia preview (simple iframe)
+      if (/^https?:\/\/([a-z]+\.)?wikipedia\.org\/wiki\/[^ ]+/i.test(url)) {
+        // Show a preview iframe for Wikipedia
+        const wikiEmbedUrl = url.replace(/#.*/, ''); // Remove fragment
+        addEmbedToOverlay([wikiEmbedUrl]);
+      }
+    });
+  }
+  bufferMessage(msg);
+  if (toggledSentiments && Array.isArray(msg.predictions) && msg.predictions.some(pred => toggledSentiments.has(pred.sentiment))) return;
+  addMessageToOverlay(msg);
+});
+const summaryClient = new _src_summary_client_index_js__WEBPACK_IMPORTED_MODULE_2__["default"]();
+
+// Update bar chart when time frame changes
+timeFrameRadios.querySelectorAll('input[type=radio]').forEach(radio => {
+  radio.addEventListener('change', () => {
+    updateBarChart();
+    updateTimelineLabels();
+  });
+});
+
+// Listen for messages from the chat client (to be implemented)
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  if (request.type === "tabUrl") {
+    // Use request.url as needed
+    console.log("Tab URL received in content script:", request.url);
+    // You can now use request.url in your content script logic
+    chatClient.connect(request.url);
+  }
+  if (request.type === "getOverlayHtml") {
+    const overlay = document.getElementById('hivemind-overlay');
+    sendResponse({
+      overlayHtml: overlay ? overlay.outerHTML : "<div>Overlay not found.</div>"
+    });
+    return true;
+  }
+});
+chrome.runtime.sendMessage({
+  action: "predict",
+  prompt: "Your prompt here"
+}, response => {
+  if (response && response.result) {
+    addMessageToOverlay(response.result);
+  }
+});
+function addEmbedToOverlay(urls) {
+  urls.forEach(url => {
+    let embedElement = null;
+    // Image
+    if (/\.(jpg|jpeg|png|gif|webp)$/i.test(url)) {
+      embedElement = document.createElement('img');
+      embedElement.src = url;
+      embedElement.style.margin = '4px';
+    }
+    // YouTube video
+    else if (/youtube\.com\/watch\?v=|youtu\.be\//i.test(url)) {
+      let videoId = null;
+      const ytMatch = url.match(/(?:v=|youtu\.be\/)([A-Za-z0-9_\-]+)/);
+      if (ytMatch) videoId = ytMatch[1];
+      if (videoId) {
+        embedElement = document.createElement('iframe');
+        embedElement.src = `https://www.youtube.com/embed/${videoId}`;
+        embedElement.frameBorder = "0";
+        embedElement.allow = "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture";
+        embedElement.allowFullscreen = true;
+        embedElement.style.margin = '4px';
+      }
+    }
+    // Twitch VOD
+    else if (/twitch\.tv\/videos\/(\d+)/i.test(url)) {
+      const twitchMatch = url.match(/twitch\.tv\/videos\/(\d+)/i);
+      if (twitchMatch) {
+        embedElement = document.createElement('iframe');
+        embedElement.src = `https://player.twitch.tv/?video=${twitchMatch[1]}&parent=${location.hostname}`;
+        embedElement.frameBorder = "0";
+        embedElement.allowFullscreen = true;
+        embedElement.style.margin = '4px';
+      }
+    }
+    // MP4 video
+    else if (/\.mp4$/i.test(url)) {
+      embedElement = document.createElement('video');
+      embedElement.src = url;
+      embedElement.controls = true;
+      embedElement.style.margin = '4px';
+    }
+    // X/Twitter post
+    else if (/^(https?:\/\/)?(x\.com|twitter\.com)\/[^\/]+\/status\/\d+/i.test(url)) {
+      embedElement.className = 'twitter-tweet';
+      embedElement.innerHTML = `<a href="${url}"></a>`;
+
+      // Load widgets.js if not already loaded
+      if (!window.twttr) {
+        const script = document.createElement('script');
+        script.src = 'https://platform.twitter.com/widgets.js';
+        script.async = true;
+        document.body.appendChild(script);
+      } else {
+        window.twttr.widgets.load();
+      }
+    }
+    // TikTok video
+    else if (/tiktok\.com\/(@[\w.-]+\/video\/\d+)/i.test(url)) {
+      // Embed using TikTok's embed player
+      embedElement = document.createElement('iframe');
+      embedElement.src = `https://www.tiktok.com/embed/${url.match(/video\/(\d+)/)[1]}`;
+      embedElement.frameBorder = "0";
+      embedElement.allow = "encrypted-media";
+      embedElement.allowFullscreen = true;
+      embedElement.style.margin = '4px';
+    }
+    // Threads post
+    else if (/threads\.net\/@[\w.-]+\/post\/\d+/i.test(url)) {
+      // Threads does not have an official embed, so fallback to a link preview
+      embedElement = document.createElement('a');
+      embedElement.href = url;
+      embedElement.target = '_blank';
+      embedElement.rel = 'noopener noreferrer';
+      embedElement.textContent = "View on Threads";
+      embedElement.style.display = 'inline-block';
+      embedElement.style.margin = '4px';
+      embedElement.style.fontSize = '12px';
+      embedElement.style.color = '#4FC3F7';
+      embedElement.style.textDecoration = 'underline';
+    }
+    // Instagram post
+    else if (/instagram\.com\/p\/[\w-]+/i.test(url)) {
+      embedElement = document.createElement('iframe');
+      embedElement.src = `https://www.instagram.com/p/${url.match(/instagram\.com\/p\/([\w-]+)/i)[1]}/embed`;
+      embedElement.frameBorder = "0";
+      embedElement.allowFullscreen = true;
+      embedElement.style.margin = '4px';
+    }
+    // Facebook post
+    else if (/facebook\.com\/[^\/]+\/posts\/\d+/i.test(url)) {
+      embedElement = document.createElement('iframe');
+      embedElement.src = `https://www.facebook.com/plugins/post.php?href=${encodeURIComponent(url)}`;
+      embedElement.frameBorder = "0";
+      embedElement.allowFullscreen = true;
+      embedElement.style.margin = '4px';
+    }
+    // Reddit post
+    else if (/reddit\.com\/r\/[\w\d_]+\/comments\/[\w\d]+/i.test(url)) {
+      embedElement = document.createElement('iframe');
+      embedElement.src = `https://www.redditmedia.com${url.replace(/^https?:\/\/(www\.)?reddit\.com/, '')}`;
+      embedElement.frameBorder = "0";
+      embedElement.allowFullscreen = true;
+      embedElement.style.margin = '4px';
+    }
+    // Bluesky post
+    else if (/bsky\.app\/profile\/[^\/]+\/post\/[\w\d]+/i.test(url)) {
+      embedElement = document.createElement('iframe');
+      embedElement.src = url;
+      embedElement.frameBorder = "0";
+      embedElement.allowFullscreen = true;
+      embedElement.style.margin = '4px';
+    }
+    // Mastodon post
+    else if (/\/@[\w\d_]+\/\d+$/i.test(url) && /mastodon\./i.test(url)) {
+      embedElement = document.createElement('iframe');
+      embedElement.src = url;
+      embedElement.frameBorder = "0";
+      embedElement.allowFullscreen = true;
+      embedElement.style.margin = '4px';
+    }
+    // Wikipedia article
+    else if (/^https?:\/\/([a-z]+\.)?wikipedia\.org\/wiki\/[^ ]+/i.test(url)) {
+      embedElement = document.createElement('iframe');
+      // Remove fragment for cleaner preview
+      embedElement.src = url.replace(/#.*/, '');
+      embedElement.frameBorder = "0";
+      embedElement.allowFullscreen = false;
+      embedElement.style.margin = '4px';
+    }
+    // Generic link (fallback)
+    else {
+      embedElement = document.createElement('a');
+      embedElement.href = url;
+      embedElement.target = '_blank';
+      embedElement.rel = 'noopener noreferrer';
+      embedElement.textContent = url.replace(/^https?:\/\//, '').split(/[/?#]/)[0];
+      embedElement.style.display = 'inline-block';
+      embedElement.style.margin = '4px';
+      embedElement.style.fontSize = '12px';
+      embedElement.style.color = '#4FC3F7';
+      embedElement.style.textDecoration = 'underline';
+    }
+    if (embedElement) {
+      embedElement.style.maxWidth = '250px';
+      embedElement.style.maxHeight = '200px';
+      embedElement.style.objectFit = 'contain';
+      embedElement.style.display = 'inline-block';
+      mediaEmbedRowContainer.appendChild(embedElement);
+    }
+  });
+}
+
+/**
+ * Aggregate sentiment predictions from a message and update the sentiment summary.
+ */
+function scrollOverlayToBottom() {
   const messagesContainer = document.getElementById('hivemind-messages');
   if (messagesContainer) {
     messagesContainer.scrollTop = messagesContainer.scrollHeight;
   }
-};
+}
 
-const chatClient = new _src_chatClient_index_js__WEBPACK_IMPORTED_MODULE_1__["default"]('twitch'); // or 'youtube'
-chatClient.on('message', msg => {
-  console.log(toggledSentiments);
-  aggregateSentiment(msg);
-  bufferMessage(msg);
-  if (toggledSentiments && msg.predictions.some(pred => toggledSentiments.has(pred.sentiment))) return;
-  addMessageToOverlay(msg);
-});
-const addMessageToOverlay = message => {
+/**
+ * Aggregate sentiment predictions from a message and update the sentiment summary.
+ */
+function addMessageToOverlay(message) {
   const messageElement = renderMessageElement(message);
 
   // Create a parent container for messages
@@ -19501,7 +19895,11 @@ const addMessageToOverlay = message => {
   if (!chatPaused) updateBarChart();
   if (!chatPaused) updatePieChartForWindow();
   if (!chatPaused) updateTimelineLabels();
-};
+}
+
+/**
+ * Aggregate sentiment predictions from a message and update the sentiment summary.
+ */
 function renderMessageElement(message) {
   // Alternate user colors
 
@@ -19563,6 +19961,10 @@ function renderMessageElement(message) {
   messageElement.appendChild(rightContainer);
   return messageElement;
 }
+
+/**
+ * Update the pie chart based on the current window's sentiment counts.
+ */
 function updateBarChart() {
   let bucketCount = Math.max(10, Math.min(100, Math.round(selectedTimeFrame / 2)));
   const timespan = selectedTimeFrame;
@@ -19709,40 +20111,9 @@ function updateBarChart() {
   }
 }
 
-// Update bar chart when time frame changes
-timeFrameRadios.querySelectorAll('input[type=radio]').forEach(radio => {
-  radio.addEventListener('change', () => {
-    updateBarChart();
-    updateTimelineLabels();
-  });
-});
-
-// Listen for messages from the chat client (to be implemented)
-chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  if (request.type === "tabUrl") {
-    // Use request.url as needed
-    console.log("Tab URL received in content script:", request.url);
-    // You can now use request.url in your content script logic
-    chatClient.connect(request.url);
-  }
-  if (request.type === "getOverlayHtml") {
-    const overlay = document.getElementById('hivemind-overlay');
-    sendResponse({
-      overlayHtml: overlay ? overlay.outerHTML : "<div>Overlay not found.</div>"
-    });
-    return true;
-  }
-});
-chrome.runtime.sendMessage({
-  action: "predict",
-  prompt: "Your prompt here"
-}, response => {
-  if (response && response.result) {
-    addMessageToOverlay(response.result);
-  }
-});
-
-// Helper to find a "nice" round number for axis ticks
+/**
+ * Calculates a "nice" tick interval for a chart axis based on the maximum value and desired tick count.
+ */
 function niceTickInterval(maxValue, tickCount) {
   if (maxValue === 0) return 1;
   const rough = maxValue / (tickCount - 1);
@@ -19757,6 +20128,347 @@ function niceTickInterval(maxValue, tickCount) {
     }
   }
   return bestStep;
+}
+
+// --- Chart.js Pie Chart Setup (make sure Chart.js is loaded in your extension) ---
+let toggledSentiments = new Set();
+let pieChart;
+/**
+ * Updates the pie chart with the given sentiment counts.
+ */
+function updatePieChart(sentimentCounts) {
+  // Sort sentimentCounts by count descending
+  const sortedEntries = Object.entries(sentimentCounts).sort((a, b) => b[1] - a[1]);
+  const labels = sortedEntries.map(([sentiment, count]) => {
+    const emoji = sentimentEmojis[sentiment] || sentimentEmojis.default;
+    return `${emoji} ${sentiment} (${count})`;
+  });
+  const data = sortedEntries.map(([, count]) => count);
+  const sentiments = sortedEntries.map(([sentiment]) => sentiment);
+  const backgroundColors = sentiments.map(sentiment => sentimentColorPalette[sentiment.trim().toLowerCase()] || sentimentColorPalette.default);
+  if (!pieChart) {
+    const ctx = pieCanvas.getContext('2d');
+    pieChart = new chart_js_auto__WEBPACK_IMPORTED_MODULE_0__["default"](ctx, {
+      type: 'pie',
+      data: {
+        labels: labels,
+        // Slice labels
+        datasets: [{
+          data: data,
+          backgroundColor: backgroundColors
+        }]
+      },
+      options: {
+        responsive: false,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            display: true,
+            position: 'right',
+            labels: {
+              generateLabels: function (chart) {
+                const data = chart.data;
+                if (data.labels.length && data.datasets.length) {
+                  return data.labels.map((label, i) => ({
+                    text: label,
+                    fontColor: '#fff',
+                    color: '#fff',
+                    fillStyle: data.datasets[0].backgroundColor[i],
+                    hidden: chart.getDatasetMeta(0).data[i].hidden,
+                    index: i,
+                    datasetIndex: 0 // Important for onClick!
+                  }));
+                }
+                return [];
+              }
+            },
+            onClick: function (e, legendItem, legend) {
+              console.log('Legend item clicked', legendItem);
+              // Double-click detection
+              // If double-clicked on the same legend item within threshold, toggle ONLY this sentiment,
+              // or if already only this sentiment is visible, restore all (undo)
+
+              if (!legendClickState.lastClickTime) legendClickState.lastClickTime = 0;
+              if (legendClickState.lastClickIndex === undefined || legendClickState.lastClickIndex === null) legendClickState.lastClickIndex = -1;
+              const now = Date.now();
+              const DOUBLE_CLICK_MS = 250;
+              const chart = legend.chart;
+              const index = legendItem.index;
+              const sentiment = chart.data.labels[index].replace(/^[^\w]+/, '') // Remove leading emoji and spaces
+              .replace(/\s*\(\d+\)$/, '') // Remove trailing (count)
+              .trim().toLowerCase();
+              if (legendClickState.lastClickIndex === index && now - legendClickState.lastClickTime < DOUBLE_CLICK_MS) {
+                console.log('double click', legendItem);
+                // If only this sentiment is visible (all others hidden), restore all
+                const totalSentiments = chart.data.labels.length;
+                const onlyThisVisible = toggledSentiments.size === totalSentiments - 1 && !toggledSentiments.has(sentiment);
+                const onlyThisHidden = toggledSentiments.size === totalSentiments - 1 && toggledSentiments.has(sentiment);
+                if (onlyThisVisible || onlyThisHidden) {
+                  toggledSentiments.clear();
+                } else {
+                  console.log('hide all');
+                  // Hide all except this sentiment
+                  toggledSentiments.clear();
+                  chart.data.labels.forEach(l => {
+                    const s = l.replace(/^[^\w]+/, '') // Remove leading emoji and spaces
+                    .replace(/\s*\(\d+\)$/, '') // Remove trailing (count)
+                    .trim().toLowerCase();
+                    if (s !== sentiment) toggledSentiments.add(s);
+                  });
+                }
+              } else {
+                console.log('single click', legendItem);
+                // Normal single click: toggle this sentiment
+                if (toggledSentiments.has(sentiment)) {
+                  toggledSentiments.delete(sentiment);
+                } else {
+                  toggledSentiments.add(sentiment);
+                }
+              }
+              legendClickState.lastClickTime = now;
+              legendClickState.lastClickIndex = index;
+
+              // After toggling, update all slices' hidden state based on sentiment key
+              const meta = chart.getDatasetMeta(legendItem.datasetIndex);
+              meta.data.forEach((slice, i) => {
+                const sliceSentiment = pieChart.data.labels[i].replace(/^[^\w]+/, '') // Remove leading emoji and spaces
+                .replace(/\s*\(\d+\)$/, '') // Remove trailing (count)
+                .trim().toLowerCase();
+                slice.hidden = toggledSentiments.has(sliceSentiment);
+              });
+              chart.update();
+              const messagesContainer = document.getElementById('hivemind-messages');
+              if (messagesContainer) {
+                messagesContainer.innerHTML = '';
+                windowMessages.forEach(msg => {
+                  if (msg.predictions.some(pred => toggledSentiments.has(pred.sentiment))) return;
+                  // Use the helper function to render the message element without side effects
+                  const messageElement = renderMessageElement(msg);
+                  messagesContainer.appendChild(messageElement);
+                });
+              }
+              updateBarChart(); // Update bar chart to reflect new sentiment visibility
+            }
+          }
+        }
+      }
+    });
+  } else {
+    pieChart.data.labels = labels;
+    pieChart.data.datasets[0].data = data;
+    pieChart.data.datasets[0].backgroundColor = backgroundColors;
+
+    // After updating data, re-apply hidden state to slices
+    const meta = pieChart.getDatasetMeta(0);
+    meta.data.forEach((slice, i) => {
+      if (pieChart.data.labels[i] === undefined) {
+        return;
+      }
+      // Remove emoji and (#) from the label to get the sentiment key
+      const sliceSentiment = pieChart.data.labels[i].replace(/^[^\w]+/, '') // Remove leading emoji and spaces
+      .replace(/\s*\(\d+\)$/, '') // Remove trailing (count)
+      .trim().toLowerCase();
+      slice.hidden = toggledSentiments.has(sliceSentiment);
+    });
+    pieChart.update();
+    updateBarChart(); // Optionally update bar chart to reflect new window
+  }
+}
+
+/**
+ * Updates the time slider to match the selected time frame.
+ */
+function updateTimelineLabels() {
+  timelineContainer.innerHTML = '';
+  const tickCount = 8; // Match your sliderTicks
+  const value = parseInt(timeSlider.value, 10);
+  const bufferStart = chatBuffer.length ? chatBuffer[0].ts : Date.now();
+  const bufferEnd = chatBuffer.length ? chatBuffer[chatBuffer.length - 1].ts : Date.now();
+  const bufferDuration = bufferEnd - bufferStart;
+  const sliderFraction = value / 99;
+  const windowEnd = bufferStart + sliderFraction * bufferDuration;
+  const windowStart = windowEnd - selectedTimeFrame * 1000;
+  const interval = selectedTimeFrame / (tickCount - 1);
+  for (let i = 0; i < tickCount; i++) {
+    const tick = document.createElement('span');
+    tick.style.flex = '1 1 0';
+    tick.style.textAlign = 'center';
+    // Calculate timestamp for this tick
+    let secondsAgo = selectedTimeFrame - i * interval;
+    let ts = windowEnd - secondsAgo * 1000;
+    const date = new Date(ts);
+    // Format as HH:MM:SS or HH:MM
+    let label = date.toLocaleTimeString([], {
+      hour: '2-digit',
+      minute: '2-digit',
+      second: selectedTimeFrame < 3600 ? '2-digit' : undefined
+    });
+    tick.textContent = label;
+    timelineContainer.appendChild(tick);
+  }
+}
+
+/**
+ * Updates the slider ticks to show the left (limit) and right ("now") labels.
+ */
+function updateSliderTicks() {
+  sliderTicksContainer.innerHTML = '';
+  // Only show two ticks: left (limit) and right ("now")
+  const leftTick = document.createElement('span');
+  leftTick.style.flex = '1 1 0';
+  leftTick.style.textAlign = 'left';
+  // Format left label as mm:ss or h:mm:ss
+  let label;
+  if (selectedTimeFrame >= 3600) {
+    const h = Math.floor(selectedTimeFrame / 3600);
+    const m = Math.floor(selectedTimeFrame % 3600 / 60);
+    label = `${h}h${m > 0 ? m + 'm' : ''}`;
+  } else if (selectedTimeFrame >= 60) {
+    const m = Math.floor(selectedTimeFrame / 60);
+    const s = selectedTimeFrame % 60;
+    label = s === 0 ? `${m}m` : `${m}m${s}s`;
+  } else {
+    label = `${selectedTimeFrame}s`;
+  }
+  leftTick.textContent = label;
+  sliderTicksContainer.appendChild(leftTick);
+  const rightTick = document.createElement('span');
+  rightTick.style.flex = '1 1 0';
+  rightTick.style.textAlign = 'right';
+  rightTick.textContent = 'now';
+  sliderTicksContainer.appendChild(rightTick);
+}
+
+/**
+ * Updates the pie chart for the current window based on the selected time frame.
+ */
+function updatePieChartForWindow() {
+  const now = Date.now();
+  const cutoff = now - selectedTimeFrame * 1000;
+  windowMessages = chatBuffer.filter(msg => msg.ts >= cutoff) || [];
+
+  // Aggregate sentiment counts in the window
+  const windowSentimentCounts = {};
+  windowMessages.forEach(msg => {
+    if (Array.isArray(msg.predictions)) {
+      msg.predictions.forEach(pred => {
+        windowSentimentCounts[pred.sentiment] = (windowSentimentCounts[pred.sentiment] || 0) + 1;
+      });
+    }
+  });
+  if (!chatPaused) updatePieChart(windowSentimentCounts);
+  //updateEmbedsForWindow()
+}
+
+// --- Ranking List with Up/Down Arrows ---
+let previousRanking = [];
+/**
+ * Updates the ranking list with sentiment movements.
+ */
+function updateRankingList(sortedSentiments) {
+  movementArrowList.innerHTML = '';
+  sortedSentiments.forEach((item, idx) => {
+    const li = document.createElement('li');
+    li.style.display = 'flex';
+    li.style.alignItems = 'center';
+    li.style.gap = '6px';
+    li.style.whiteSpace = 'nowrap'; // Prevent line break
+    li.style.overflow = 'hidden';
+    li.style.textOverflow = 'ellipsis';
+    li.style.maxWidth = '220px'; // Adjust as needed
+
+    // Arrow logic
+    const prevIdx = previousRanking.findIndex(s => s.sentiment === item.sentiment);
+    let arrow = '';
+    let arrowColor = '';
+    if (prevIdx !== -1) {
+      if (prevIdx > idx) {
+        arrow = '⬆︎';
+        arrowColor = 'green';
+      } else if (prevIdx < idx) {
+        arrow = '⬇︎';
+        arrowColor = 'red';
+      }
+    }
+    li.style.padding = '0.5px 0'; // Add vertical padding
+
+    // Arrow (if any)
+    if (arrow) {
+      const arrowSpan = document.createElement('span');
+      arrowSpan.textContent = arrow;
+      arrowSpan.style.color = arrowColor;
+      arrowSpan.style.fontWeight = 'bold';
+      arrowSpan.style.marginRight = '2px';
+      li.appendChild(arrowSpan);
+    }
+
+    //li.appendChild(sentimentLabel);
+    li.appendChild(document.createTextNode(' '));
+    movementArrowList.appendChild(li);
+  });
+  previousRanking = sortedSentiments.map(s => ({
+    ...s
+  })); // Deep copy
+}
+const sentimentCounts = {};
+/**
+ * Aggregates sentiment counts from a message and updates the pie chart.
+ * @param {*} message 
+ */
+function aggregateSentiment(message) {
+  if (Array.isArray(message.predictions)) {
+    message.predictions.forEach(pred => {
+      if (pred.score * 100 >= 10) sentimentCounts[pred.sentiment] = (sentimentCounts[pred.sentiment] || 0) + 1;
+    });
+    // Update UI
+    updatePieChartForWindow(); // Sort and update ranking
+    const sorted = Object.entries(sentimentCounts).map(([sentiment, count]) => ({
+      sentiment,
+      count
+    })).sort((a, b) => b.count - a.count);
+    //updateRankingList(sorted);
+  }
+}
+
+/**
+ * Buffers a chat message for processing.
+ * @param {*} message 
+ */
+function bufferMessage(message) {
+  chatBuffer.push({
+    ...message,
+    ts: Date.now()
+  });
+  // Remove old messages
+  const cutoff = Date.now() - MAX_BUFFER_SECONDS * 1000;
+  while (chatBuffer.length && chatBuffer[0].ts < cutoff) {
+    chatBuffer.shift();
+  }
+}
+
+/**
+ * Adjust the timeSlider so that its range always matches the selectedTimeFrame.
+ * The slider's left (0) is the oldest point in the buffer that still covers the selectedTimeFrame,
+ * and right (99) is "now".
+ * When the time frame changes, reset the slider to "now".
+ */
+function adjustTimeSliderForTimeFrame() {
+  // Always keep slider at "now" when time frame changes
+  timeSlider.value = 99;
+}
+
+// When you want to summarize the current chat window:
+async function updateSummaryUI() {
+  try {
+    const summary = await summaryClient.summarizeWindow(windowMessages, {
+      timeframe: selectedTimeFrame,
+      channel: 'your_channel_name'
+    });
+    // Now update your emotion radar UI, alerts, etc. with summary
+    updateEmotionRadarUI(summary);
+  } catch (err) {
+    console.error('Summary error:', err);
+  }
 }
 })();
 
