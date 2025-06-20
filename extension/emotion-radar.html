@@ -10,9 +10,38 @@
             color: white;
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             display: flex;
+            flex-direction: column;
             justify-content: center;
             align-items: center;
             height: 100vh;
+        }
+        .sentiment-table {
+            margin-bottom: 24px;
+            border-collapse: collapse;
+            background: #161b22;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 8px #0006;
+            min-width: 100px;
+        }
+        .sentiment-table th, .sentiment-table td {
+            padding: 8px 16px;
+            text-align: left;
+        }
+        .sentiment-table th {
+            background: #21262d;
+            color: #58a6ff;
+            font-weight: 600;
+        }
+        .sentiment-table tr:not(:last-child) td {
+            border-bottom: 1px solid #30363d;
+        }
+        .sentiment-label {
+            text-transform: capitalize;
+        }
+        .sentiment-value {
+            font-family: 'Segoe UI Mono', 'Consolas', monospace;
+            text-align: right;
         }
         .radar-container {
             position: relative;
@@ -85,21 +114,40 @@
     </style>
 </head>
 <body>
-<div class="radar-container" style="flex-shrink: 0;">
-        <img class="radar-map" src="images/world-map-projection.png" alt="World Map" style="z-index: 0;" />
-        <svg class="radar-sweep" width="700px" height="100%" viewBox="0 0 600 300" style="pointer-events:none;">
-            <!-- Example: 60-degree sweep -->
-            <path id="sweep" fill="rgba(0,255,255,0.3)" d="
-            M300,150
-            L0,50
-            A200,0 0 0,0 0,15
-            Z
-            " />
-        </svg>
+    <div style="display: flex; flex-direction: column; align-items: center; gap: 32px;">
+        <div class="radar-container" style="margin-bottom: 0;">
+            <img class="radar-map" src="images/world-map-projection.png" alt="World Map" style="z-index: 0;" />
+            <svg class="radar-sweep" width="700px" height="100%" viewBox="0 0 600 300" style="pointer-events:none;">
+                <!-- Example: 60-degree sweep -->
+                <path id="sweep" fill="rgba(0,255,255,0.3)" d="
+                M300,150
+                L0,50
+                A200,0 0 0,0 0,15
+                Z
+                " />
+            </svg>
+        </div>
+        <div class="sentiment-table" style="width: 90%; max-width: 600px;">
+            <table style="width: 100%;">
+                <thead>
+                    <tr>
+                        <th>Happiness</th>
+                        <th>Sadness</th>
+                        <th>Anger</th>
+                        <th>Fear</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td class="sentiment-value" id="happiness-value">0.25</td>
+                        <td class="sentiment-value" id="sadness-value">0.25</td>
+                        <td class="sentiment-value" id="anger-value">0.25</td>
+                        <td class="sentiment-value" id="fear-value">0.25</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
     </div>
-    <!-- Dynamically injected ping elements go here -->
-</div>
-
   <script>
     // Load and execute the external emotion-radar.js script
     const script = document.createElement('script');

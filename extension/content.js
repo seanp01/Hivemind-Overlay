@@ -507,6 +507,14 @@ timelineContainer.style.marginTop = '-2px'; // Adjust as needed
 
 sliderBarContainer.appendChild(timelineContainer);
 
+const mediaEmbedRowContainer = document.createElement('div');
+mediaEmbedRowContainer.style.display = 'flex';
+mediaEmbedRowContainer.style.flexDirection = 'row';
+mediaEmbedRowContainer.style.alignItems = 'center';
+mediaEmbedRowContainer.style.width = '100%';
+
+sliderBarContainer.appendChild(mediaEmbedRowContainer);
+
 const chatBuffer = [];
 const MAX_BUFFER_SECONDS = timeFrames[timeFrames.length - 1].value; // 24h (86400 seconds)
 let windowMessages = [];
@@ -611,6 +619,7 @@ timeSlider.addEventListener('input', () => {
     updateSliderTicks();
     updateBarChart(); // Optionally update bar chart to reflect new window
     updateTimelineLabels();
+    updateEmbedsForWindow();
 });
 
 updateTimelineLabels();
@@ -637,10 +646,39 @@ sentimentSummaryContainer.appendChild(radarIframe);
 
 let chatPaused = false;
 
+let windowEmbeds = [];
+function updateEmbedsForWindow() {
+    // Remove all current embeds
+    mediaEmbedRowContainer.innerHTML = '';
+    // Collect all unique URLs from messages in the current window
+    const urlSet = new Set();
+    windowMessages.forEach(msg => {
+        if (typeof msg.message === "string") {
+            const urlRegex = /(https?:\/\/[^\s]+)/g;
+            const urls = msg.message.match(urlRegex);
+            if (urls) {
+                urls.forEach(url => urlSet.add(url));
+            }
+        }
+    });
+    // Add embeds for all URLs in the window
+    if (urlSet.size > 0) {
+        addEmbedToOverlay(Array.from(urlSet));
+    }
+}
+
 const chatClient = new ChatClient('twitch'); // or 'youtube'
 chatClient.on('message', (msg) => {
     console.log(toggledSentiments);
     aggregateSentiment(msg);
+    // If the message contains a URL for any type of media embed, add an embed to the UI
+    if (typeof msg.message === "string") {
+        const urlRegex = /(https?:\/\/[^\s]+)/g;
+        const urls = msg.message.match(urlRegex);
+        if (urls) {
+            addEmbedToOverlay(urls);
+        }
+    }
     bufferMessage(msg);
     if (toggledSentiments && msg.predictions.some(pred => toggledSentiments.has(pred.sentiment))) return;
     addMessageToOverlay(msg)
@@ -681,6 +719,59 @@ chrome.runtime.sendMessage(
         }
     }
 );
+
+function addEmbedToOverlay(urls) {
+    urls.forEach(url => {
+        // Basic media type detection
+        let embedElement = null;
+        if (/\.(jpg|jpeg|png|gif|webp)$/i.test(url)) {
+            // Image
+            embedElement = document.createElement('img');
+            embedElement.src = url;
+            embedElement.style.maxWidth = '200px';
+            embedElement.style.maxHeight = '120px';
+            embedElement.style.margin = '4px';
+        } else if (/youtube\.com\/watch\?v=|youtu\.be\//i.test(url)) {
+            // YouTube video
+            let videoId = null;
+            const ytMatch = url.match(/(?:v=|youtu\.be\/)([A-Za-z0-9_\-]+)/);
+            if (ytMatch) videoId = ytMatch[1];
+            if (videoId) {
+                embedElement = document.createElement('iframe');
+                embedElement.src = `https://www.youtube.com/embed/${videoId}`;
+                embedElement.width = "220";
+                embedElement.height = "124";
+                embedElement.frameBorder = "0";
+                embedElement.allow = "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture";
+                embedElement.allowFullscreen = true;
+                embedElement.style.margin = '4px';
+            }
+        } else if (/twitch\.tv\/videos\/(\d+)/i.test(url)) {
+            // Twitch VOD
+            const twitchMatch = url.match(/twitch\.tv\/videos\/(\d+)/i);
+            if (twitchMatch) {
+                embedElement = document.createElement('iframe');
+                embedElement.src = `https://player.twitch.tv/?video=${twitchMatch[1]}&parent=${location.hostname}`;
+                embedElement.width = "220";
+                embedElement.height = "124";
+                embedElement.frameBorder = "0";
+                embedElement.allowFullscreen = true;
+                embedElement.style.margin = '4px';
+            }
+        } else if (/\.mp4$/i.test(url)) {
+            // MP4 video
+            embedElement = document.createElement('video');
+            embedElement.src = url;
+            embedElement.controls = true;
+            embedElement.style.maxWidth = '220px';
+            embedElement.style.maxHeight = '124px';
+            embedElement.style.margin = '4px';
+        }
+        if (embedElement) {
+            mediaEmbedRowContainer.appendChild(embedElement);
+        }
+    });
+}
 
 /**
  * Aggregate sentiment predictions from a message and update the sentiment summary.
@@ -1214,6 +1305,7 @@ function updatePieChartForWindow() {
     });
 
     if (!chatPaused) updatePieChart(windowSentimentCounts);
+    updateEmbedsForWindow()
 }
 
 // --- Ranking List with Up/Down Arrows ---
