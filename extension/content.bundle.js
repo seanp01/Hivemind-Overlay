@@ -19182,6 +19182,20 @@ expandButton.style.display = 'flex';
 expandButton.style.alignItems = 'center';
 expandButton.style.justifyContent = 'center';
 expandButton.style.textAlign = 'center';
+let messagesContainer = document.createElement('div');
+messagesContainer.id = 'hivemind-messages';
+// Remove fixed height to allow flexbox to control sizing
+messagesContainer.style.overflowY = 'auto';
+messagesContainer.style.position = 'static';
+messagesContainer.style.display = 'flex';
+messagesContainer.style.background = 'rgba(30,30,30,0.85)';
+messagesContainer.style.borderRadius = '8px';
+messagesContainer.style.flexDirection = 'column';
+messagesContainer.style.gap = '4px';
+messagesContainer.style.flex = '1 1 0'; // Allow to grow/shrink in flex layout
+messagesContainer.style.minWidth = '0';
+messagesContainer.style.minHeight = '300px';
+messagesContainer.style.margin = '10px';
 const timeFrames = [{
   label: '10s',
   value: 10
@@ -19265,40 +19279,90 @@ buttonBar.appendChild(minimizeButton);
 
 // This file injects overlay/UI elements into Twitch and YouTube pages, allowing real-time monitoring and interaction with live chats.
 // Only create the overlay if it doesn't already exist
-let overlayContainer = document.getElementById('hivemind-overlay');
-if (!overlayContainer) {
-  overlayContainer = document.createElement('div');
-  overlayContainer.id = 'hivemind-overlay';
-  overlayContainer.style.position = 'fixed';
-  overlayContainer.style.top = '10px';
-  overlayContainer.style.right = '10px';
-  overlayContainer.style.bottom = '50px';
-  overlayContainer.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
-  overlayContainer.style.color = 'white';
-  overlayContainer.style.padding = '20px';
-  overlayContainer.style.borderRadius = '5px';
-  overlayContainer.style.zIndex = '9999';
-  overlayContainer.style.maxHeight = 'calc(100vh - 30px)'; // 10px top + 20px bottom
-  overlayContainer.style.overflowY = 'scroll';
-  overlayContainer.style.width = '100%';
-  overlayContainer.style.fontFamily = 'Arial, sans-serif';
-  overlayContainer.style.fontSize = '14px';
-  document.body.appendChild(overlayContainer);
-}
+let overlayContainer = document.createElement('div');
+overlayContainer.id = 'hivemind-overlay';
+overlayContainer.style.position = 'fixed';
+overlayContainer.style.top = '10px';
+overlayContainer.style.right = '10px';
+overlayContainer.style.bottom = '50px';
+overlayContainer.style.flexDirection = 'row';
+overlayContainer.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
+overlayContainer.style.color = 'white';
+overlayContainer.style.padding = '20px';
+overlayContainer.style.borderRadius = '5px';
+overlayContainer.style.zIndex = '9999';
+overlayContainer.style.height = '100%';
+overlayContainer.style.maxHeight = 'calc(100vh - 30px)'; // 10px top + 20px bottom
+overlayContainer.style.overflowY = 'scroll';
+overlayContainer.style.width = '100%';
+overlayContainer.style.fontFamily = 'Arial, sans-serif';
+overlayContainer.style.fontSize = '14px';
+document.body.appendChild(overlayContainer);
 overlayContainer.appendChild(buttonBar);
+let leftOverlayColumnContainer = document.createElement('div');
+leftOverlayColumnContainer.style.display = 'flex';
+leftOverlayColumnContainer.style.flexDirection = 'column';
+leftOverlayColumnContainer.style.width = '80%';
+leftOverlayColumnContainer.style.height = '100%';
+leftOverlayColumnContainer.style.left = '0';
+leftOverlayColumnContainer.style.alignItems = 'stretch'; // Ensures children stack vertically and fill width
 
 // --- Sentiment Summary UI ---
 const sentimentSummaryContainer = document.createElement('div');
 sentimentSummaryContainer.id = 'sentiment-summary';
 sentimentSummaryContainer.style.background = 'rgba(30,30,30,0.85)';
-sentimentSummaryContainer.style.padding = '10px';
 sentimentSummaryContainer.style.marginBottom = '10px';
+sentimentSummaryContainer.style.width = '100%';
 sentimentSummaryContainer.style.marginTop = '10px';
 sentimentSummaryContainer.style.borderRadius = '8px';
 sentimentSummaryContainer.style.display = 'flex';
 sentimentSummaryContainer.style.flexDirection = 'row';
-sentimentSummaryContainer.style.alignItems = 'center';
+sentimentSummaryContainer.style.alignItems = 'left';
 sentimentSummaryContainer.style.gap = '24px';
+
+// Create a flex row container to hold sentiment summary and radar side by side
+const summaryRadarRow = document.createElement('div');
+summaryRadarRow.style.display = 'flex';
+summaryRadarRow.style.flexDirection = 'row';
+summaryRadarRow.style.alignItems = 'center';
+summaryRadarRow.style.width = '100%';
+summaryRadarRow.style.height = '320px';
+summaryRadarRow.style.gap = '32px';
+summaryRadarRow.style.marginLeft = '10px';
+summaryRadarRow.style.marginRight = '10px';
+
+// Move sentimentSummaryContainer into the row
+summaryRadarRow.appendChild(sentimentSummaryContainer);
+// Create a container for the radar
+const radarContainer = document.createElement('div');
+radarContainer.style.background = 'rgba(30,30,30,0.85)';
+radarContainer.style.padding = '10px';
+radarContainer.style.margin = '10px';
+radarContainer.style.borderRadius = '8px';
+radarContainer.style.display = 'flex';
+radarContainer.style.flexDirection = 'row';
+radarContainer.style.alignItems = 'center';
+radarContainer.style.gap = '24px';
+radarContainer.style.justifyContent = 'center';
+radarContainer.style.height = '100%';
+
+//summaryRadarRow.appendChild(radarContainer);
+
+const radarIframe = document.createElement('iframe');
+radarIframe.src = chrome.runtime.getURL('emotion-radar.html');
+radarIframe.style.width = '300px';
+radarIframe.style.height = '300px';
+radarIframe.style.right = 0;
+radarIframe.style.margin = '10px';
+radarIframe.style.border = 'none';
+radarIframe.style.background = 'transparent';
+radarIframe.style.overflow = 'hidden';
+radarIframe.scrolling = 'no';
+radarIframe.setAttribute('scrolling', 'no');
+radarIframe.allowTransparency = 'true';
+
+// Move radarIframe into the radarContainer
+radarContainer.appendChild(radarIframe);
 
 // Ranking list
 const movementArrowList = document.createElement('ol');
@@ -19339,19 +19403,38 @@ expandButton.addEventListener('click', () => {
   overlayContainer.style.display = 'block';
   expandButton.style.display = 'none';
 });
-const radarIframe = document.createElement('iframe');
-radarIframe.src = chrome.runtime.getURL('emotion-radar.html');
-radarIframe.style.width = '300px';
-radarIframe.style.height = '300px';
-radarIframe.style.border = 'none';
-radarIframe.style.position = 'absolute';
-radarIframe.style.right = '0';
-radarIframe.style.background = 'transparent';
-radarIframe.style.overflow = 'hidden';
-radarIframe.scrolling = 'no';
-radarIframe.setAttribute('scrolling', 'no');
-radarIframe.allowTransparency = 'true';
-overlayContainer.appendChild(sentimentSummaryContainer);
+// Insert the row into the overlay (replace previous sentimentSummaryContainer usage)
+
+leftOverlayColumnContainer.appendChild(messagesContainer);
+leftOverlayColumnContainer.appendChild(summaryRadarRow);
+// Create a row container to hold leftOverlayColumnContainer and mediaEmbedColumnContainer side by side
+const overlayRowContainer = document.createElement('div');
+overlayRowContainer.style.display = 'flex';
+overlayRowContainer.style.flexDirection = 'row';
+overlayRowContainer.style.width = '100%';
+overlayRowContainer.style.alignItems = 'flex-start';
+
+// Media embed column container
+let mediaEmbedColumnContainer = document.createElement('div');
+mediaEmbedColumnContainer.style.background = 'rgba(30,30,30,0.85)';
+mediaEmbedColumnContainer.style.borderRadius = '8px';
+mediaEmbedColumnContainer.id = 'hivemind-media-embeds';
+mediaEmbedColumnContainer.style.display = 'flex';
+mediaEmbedColumnContainer.style.flexDirection = 'column';
+mediaEmbedColumnContainer.style.gap = '8px';
+mediaEmbedColumnContainer.style.flex = '1 1 0';
+mediaEmbedColumnContainer.style.height = '600px';
+mediaEmbedColumnContainer.style.maxWidth = '300px';
+mediaEmbedColumnContainer.style.overflowY = 'auto';
+mediaEmbedColumnContainer.style.minWidth = '0';
+mediaEmbedColumnContainer.style.margin = '10px';
+
+// Add left and right columns to the row container
+overlayRowContainer.appendChild(leftOverlayColumnContainer);
+overlayRowContainer.appendChild(mediaEmbedColumnContainer);
+
+// Add the row container to the overlay
+overlayContainer.appendChild(overlayRowContainer);
 
 // --- Chat Volume Slider & Bar Chart ---
 
@@ -19360,8 +19443,10 @@ const sliderBarContainer = document.createElement('div');
 sliderBarContainer.style.display = 'flex';
 sliderBarContainer.style.flexDirection = 'column';
 sliderBarContainer.style.alignItems = 'stretch';
+sliderBarContainer.style.background = 'rgba(30,30,30,0.85)';
+sliderBarContainer.style.borderRadius = '8px';
 sliderBarContainer.style.gap = '4px';
-sliderBarContainer.style.marginBottom = '16px';
+sliderBarContainer.style.margin = '10px';
 
 // Vertical slider
 const timeSlider = document.createElement('input');
@@ -19386,8 +19471,10 @@ barChartContainer.style.flexDirection = 'row';
 barChartContainer.style.alignItems = 'flex-end';
 barChartContainer.style.height = '60px'; // Height of the bars
 barChartContainer.style.width = '88%';
-barChartContainer.style.justifyContent = 'flex-start';
 barChartContainer.style.gap = '1px';
+// Center the bar chart horizontally in the window
+barChartContainer.style.marginLeft = 'auto';
+barChartContainer.style.marginRight = 'auto';
 const barChartEmojiRow = document.createElement('div');
 barChartEmojiRow.style.display = 'flex';
 barChartEmojiRow.style.flexDirection = 'row';
@@ -19410,21 +19497,17 @@ sliderTicksContainer.style.marginLeft = 'auto';
 sliderTicksContainer.style.marginRight = 'auto';
 
 // Create or get the y-axis container and insert it as a sibling to the bar chart container
-let yAxisContainer = document.getElementById('hivemind-bar-yaxis');
-if (!yAxisContainer) {
-  yAxisContainer = document.createElement('div');
-  yAxisContainer.id = 'hivemind-bar-yaxis';
-  yAxisContainer.style.display = 'flex';
-  yAxisContainer.style.flexDirection = 'column';
-  yAxisContainer.style.justifyContent = 'space-between';
-  yAxisContainer.style.height = '75px';
-  yAxisContainer.style.width = '25px'; // Adjust width as needed
-  yAxisContainer.style.marginRight = '4px';
-  yAxisContainer.style.fontSize = '12px';
-  yAxisContainer.style.color = '#bbb';
-  yAxisContainer.style.textAlign = 'right';
-  yAxisContainer.style.userSelect = 'none';
-}
+let yAxisContainer = document.createElement('div');
+yAxisContainer.id = 'hivemind-bar-yaxis';
+yAxisContainer.style.display = 'flex';
+yAxisContainer.style.flexDirection = 'row';
+yAxisContainer.style.height = '75px';
+yAxisContainer.style.width = '75px';
+yAxisContainer.style.marginRight = '4px';
+yAxisContainer.style.fontSize = '12px';
+yAxisContainer.style.color = '#bbb';
+yAxisContainer.style.textAlign = 'right';
+yAxisContainer.style.userSelect = 'none';
 
 // Create y-axis line with ticks
 const yAxisLineContainer = document.createElement('div');
@@ -19436,6 +19519,18 @@ yAxisLineContainer.style.height = barChartContainer.style.height;
 yAxisLineContainer.style.width = '18px'; // Adjust width as needed
 yAxisLineContainer.style.marginRight = '10px';
 yAxisLineContainer.style.position = 'relative';
+
+// Create y-axis line with ticks
+const yAxisLabelsContainer = document.createElement('div');
+yAxisLabelsContainer.style.display = 'flex';
+yAxisLabelsContainer.style.flexDirection = 'column';
+yAxisLabelsContainer.style.justifyContent = 'center'; // Center vertically
+yAxisLabelsContainer.style.height = '75px';
+yAxisLabelsContainer.style.alignItems = 'flex-end';
+yAxisLabelsContainer.style.width = '18px'; // Adjust width as needed
+yAxisLabelsContainer.style.marginTop = '-10px';
+yAxisLabelsContainer.style.marginRight = '10px';
+yAxisLabelsContainer.style.position = 'relative';
 const yAxisTicks = 3;
 for (let i = 0; i < yAxisTicks; i++) {
   // Draw the vertical axis line only on the first tick (full height)
@@ -19467,8 +19562,17 @@ const barChartRow = document.createElement('div');
 barChartRow.style.display = 'flex';
 barChartRow.style.flexDirection = 'row';
 barChartRow.style.alignItems = 'flex-end';
+barChartRow.style.marginTop = '5px';
+// Position yAxisContainer absolutely to the left of the bar chart
+barChartRow.style.position = 'relative';
+yAxisContainer.style.position = 'absolute';
+yAxisContainer.style.left = '0';
+yAxisContainer.style.top = '0';
+yAxisContainer.style.bottom = '0';
+yAxisContainer.style.zIndex = '2';
 barChartRow.appendChild(yAxisContainer);
-barChartRow.appendChild(yAxisLineContainer);
+// Add yAxisContainer as a child of barChartRow (not barChartContainer)
+yAxisContainer.appendChild(yAxisLineContainer);
 barChartRow.appendChild(barChartContainer);
 barChartRow.style.width = '100%';
 
@@ -19492,12 +19596,6 @@ timelineContainer.style.color = '#bbb';
 timelineContainer.style.marginTop = '-2px'; // Adjust as needed
 
 sliderBarContainer.appendChild(timelineContainer);
-const mediaEmbedRowContainer = document.createElement('div');
-mediaEmbedRowContainer.style.display = 'flex';
-mediaEmbedRowContainer.style.flexDirection = 'row';
-mediaEmbedRowContainer.style.alignItems = 'center';
-mediaEmbedRowContainer.style.width = '100%';
-sliderBarContainer.appendChild(mediaEmbedRowContainer);
 const chatBuffer = [];
 const MAX_BUFFER_SECONDS = timeFrames[timeFrames.length - 1].value; // 24h (86400 seconds)
 let windowMessages = [];
@@ -19566,7 +19664,6 @@ timeSlider.addEventListener('input', () => {
 
   // 2. Filter messages in the window
   windowMessages = chatBuffer.filter(msg => msg.ts >= windowStart && msg.ts <= windowEnd) || [];
-  const messagesContainer = document.getElementById('hivemind-messages');
 
   // 3. Aggregate sentiment counts for the window
   const windowSentimentCounts = {};
@@ -19608,10 +19705,10 @@ pieCanvas.style.width = '900px';
 pieCanvas.style.height = '300px';
 pieCanvas.width = 900;
 pieCanvas.height = 300;
-pieCanvas.setAttribute('style', 'width:900px !important;height:300px !important;display:block;');
+pieCanvas.setAttribute('style', 'width:80% !important; height:300px !important; display:block;');
 const pieWrapper = document.createElement('div');
-pieWrapper.style.width = '900px';
-pieWrapper.style.height = '300px';
+pieWrapper.style.width = '70%';
+pieWrapper.style.height = '320px';
 pieWrapper.style.overflow = 'hidden';
 pieWrapper.appendChild(pieCanvas);
 sentimentSummaryContainer.style.alignItems = 'center'; // helps vertically align
@@ -19623,7 +19720,7 @@ let chatPaused = false;
 let windowEmbeds = [];
 function updateEmbedsForWindow() {
   // Remove all current embeds
-  mediaEmbedRowContainer.innerHTML = '';
+  mediaEmbedColumnContainer.innerHTML = '';
   // Collect all unique URLs from messages in the current window
   const urlSet = new Set();
   windowMessages.forEach(msg => {
@@ -19708,6 +19805,52 @@ chrome.runtime.sendMessage({
     addMessageToOverlay(response.result);
   }
 });
+/**
+ * Track embed expiration and deduplication.
+ */
+const embedExpirySeconds = 300; // 5 minutes
+const embedTimestamps = new Map();
+
+/**
+ * Periodically remove expired embeds.
+ */
+setInterval(() => {
+  const now = Date.now();
+  // Remove expired embeds from DOM and map
+  Array.from(embedTimestamps.entries()).forEach(([url, ts]) => {
+    if (now - ts > embedExpirySeconds * 1000) {
+      // Remove from DOM
+      Array.from(mediaEmbedColumnContainer.children).forEach(child => {
+        if ((child.tagName === 'IFRAME' || child.tagName === 'IMG' || child.tagName === 'VIDEO' || child.tagName === 'A') && (child.src === url || child.href === url)) {
+          child.remove();
+        }
+      });
+      embedTimestamps.delete(url);
+    }
+  });
+}, 10_000); // Check every 10 seconds
+
+// Patch addEmbedToOverlay to handle deduplication and expiration
+const origAddEmbedToOverlay = addEmbedToOverlay;
+addEmbedToOverlay = function (urls) {
+  const now = Date.now();
+  urls.forEach(url => {
+    // Remove existing embed if present (for replenishing)
+    Array.from(mediaEmbedColumnContainer.children).forEach(child => {
+      if ((child.tagName === 'IFRAME' || child.tagName === 'IMG' || child.tagName === 'VIDEO' || child.tagName === 'A') && (child.src === url || child.href === url)) {
+        child.remove();
+        embedTimestamps.delete(url);
+      }
+    });
+    // Add/re-add embed and update timestamp
+    embedTimestamps.set(url, now);
+  });
+  origAddEmbedToOverlay(urls);
+};
+
+/**
+ * Track embed expiration and deduplication.
+ */
 function addEmbedToOverlay(urls) {
   urls.forEach(url => {
     let embedElement = null;
@@ -19751,18 +19894,12 @@ function addEmbedToOverlay(urls) {
     }
     // X/Twitter post
     else if (/^(https?:\/\/)?(x\.com|twitter\.com)\/[^\/]+\/status\/\d+/i.test(url)) {
-      embedElement.className = 'twitter-tweet';
-      embedElement.innerHTML = `<a href="${url}"></a>`;
-
-      // Load widgets.js if not already loaded
-      if (!window.twttr) {
-        const script = document.createElement('script');
-        script.src = 'https://platform.twitter.com/widgets.js';
-        script.async = true;
-        document.body.appendChild(script);
-      } else {
-        window.twttr.widgets.load();
-      }
+      // Use twitframe.com to embed tweets without loading external JS
+      embedElement = document.createElement('iframe');
+      embedElement.src = `https://twitframe.com/show?url=${encodeURIComponent(url)}`;
+      embedElement.frameBorder = "0";
+      embedElement.allowFullscreen = true;
+      embedElement.style.margin = '4px';
     }
     // TikTok video
     else if (/tiktok\.com\/(@[\w.-]+\/video\/\d+)/i.test(url)) {
@@ -19855,7 +19992,7 @@ function addEmbedToOverlay(urls) {
       embedElement.style.maxHeight = '200px';
       embedElement.style.objectFit = 'contain';
       embedElement.style.display = 'inline-block';
-      mediaEmbedRowContainer.appendChild(embedElement);
+      mediaEmbedColumnContainer.appendChild(embedElement);
     }
   });
 }
@@ -19864,7 +20001,6 @@ function addEmbedToOverlay(urls) {
  * Aggregate sentiment predictions from a message and update the sentiment summary.
  */
 function scrollOverlayToBottom() {
-  const messagesContainer = document.getElementById('hivemind-messages');
   if (messagesContainer) {
     messagesContainer.scrollTop = messagesContainer.scrollHeight;
   }
@@ -19875,21 +20011,6 @@ function scrollOverlayToBottom() {
  */
 function addMessageToOverlay(message) {
   const messageElement = renderMessageElement(message);
-
-  // Create a parent container for messages
-  let messagesContainer = document.getElementById('hivemind-messages');
-  if (!messagesContainer) {
-    messagesContainer = document.createElement('div');
-    messagesContainer.id = 'hivemind-messages';
-    messagesContainer.style.height = '45%';
-    messagesContainer.style.overflowY = 'auto';
-    messagesContainer.style.position = 'static';
-    messagesContainer.style.display = 'flex';
-    messagesContainer.style.flexDirection = 'column';
-    messagesContainer.style.gap = '4px';
-    // Insert messages container before sentimentSummaryContainer if not already present
-    overlayContainer.insertBefore(messagesContainer, sentimentSummaryContainer);
-  }
   if (!chatPaused) messagesContainer.appendChild(messageElement);
   scrollOverlayToBottom();
   if (!chatPaused) updateBarChart();
@@ -19998,19 +20119,35 @@ function updateBarChart() {
   // 4. Draw bars, scaling to the window max
 
   yAxisContainer.innerHTML = '';
+  yAxisLabelsContainer.innerHTML = '';
   const yTicks = 3;
   const tickInterval = niceTickInterval(windowMax, yTicks);
   const topTick = tickInterval * (yTicks - 1);
+
+  // Calculate spacing for more vertical spread
+  const totalHeight = parseInt(barChartContainer.style.height, 10) || 60;
+  const extraSpacing = 10; // px of extra space between ticks
+
   for (let i = 0; i < yTicks; i++) {
     const tick = document.createElement('div');
     tick.style.flex = '1 1 0';
-    tick.style.height = '3px';
     tick.style.display = 'flex';
-    tick.style.fontSize = '12px';
+    tick.style.fontSize = '14px';
     tick.style.alignItems = 'flex-end';
-    tick.style.justifyContent = 'flex-end';
     const value = topTick - i * tickInterval;
-    // Format value: 10000 -> 10k, 1500000 -> 1.5M, etc.
+    // Vertically align ticks: top tick at top, bottom tick at bottom, others spaced evenly
+    tick.style.position = 'relative';
+    if (i == 0) {
+      tick.style.top = '0';
+      tick.style.position = 'absolute';
+    } else if (i == yTicks - 1) {
+      tick.style.bottom = '0';
+      tick.style.position = 'absolute';
+    } else {
+      tick.style.marginTop = 'auto';
+      tick.style.marginBottom = 'auto';
+      tick.style.position = 'absolute';
+    }
     let formattedValue;
     if (value >= 1_000_000) {
       formattedValue = (value / 1_000_000).toFixed(value % 1_000_000 === 0 ? 0 : 1) + 'M';
@@ -20020,8 +20157,10 @@ function updateBarChart() {
       formattedValue = value;
     }
     tick.textContent = formattedValue;
-    yAxisContainer.appendChild(tick);
+    yAxisLabelsContainer.appendChild(tick);
   }
+  yAxisContainer.appendChild(yAxisLabelsContainer);
+  yAxisContainer.appendChild(yAxisLineContainer);
   barChartContainer.innerHTML = '';
   barChartEmojiRow.innerHTML = '';
   // Reset static variables for lock/unlock emoji
@@ -20164,7 +20303,7 @@ function updatePieChart(sentimentCounts) {
         plugins: {
           legend: {
             display: true,
-            position: 'right',
+            position: 'left',
             labels: {
               generateLabels: function (chart) {
                 const data = chart.data;
@@ -20237,7 +20376,6 @@ function updatePieChart(sentimentCounts) {
                 slice.hidden = toggledSentiments.has(sliceSentiment);
               });
               chart.update();
-              const messagesContainer = document.getElementById('hivemind-messages');
               if (messagesContainer) {
                 messagesContainer.innerHTML = '';
                 windowMessages.forEach(msg => {
