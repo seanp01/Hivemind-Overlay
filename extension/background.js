@@ -7,8 +7,9 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
     if (
         changeInfo.status === 'complete' &&
         (
-            (tab.url && tab.url.match(/^https:\/\/www\.twitch\.tv\/.*\/chat/)) ||
-            (tab.url && tab.url.match(/^https:\/\/www\.youtube\.com\/live_chat/))
+            (tab.url && tab.url.match(/^https:\/\/www\.twitch\.tv\/.*\/chat/)) 
+            // ||
+            // (tab.url && tab.url.match(/^https:\/\/www\.youtube\.com\/live_chat/))
         )
     ) {
         chrome.tabs.sendMessage(tabId, { type: "tabUrl", url: tab.url });

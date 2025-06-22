@@ -1,27 +1,31 @@
 {
   "manifest_version": 3,
   "name": "HivemindOverlay",
-  "version": "1.0",
+  "version": "1.27.0",
   "description": "A Chrome extension that enhances Twitch and YouTube live chats by filtering junk, highlighting useful content, and analyzing live speech audio.",
   "permissions": [
     "activeTab",
     "tabs",
     "storage",
     "scripting",
-    "webRequest",
     "webRequest"
   ],
   "host_permissions": [
     "https://*.twitch.tv/*",
     "https://*.youtube.com/*",
     "http://localhost:5222/*",
-    "https://twitframe.com/*"
+    "https://*.twitframe.com/*",
+    "https://*.x.com/*",
+    "https://*.twitter.com/*",
+    "https://*.reddit.com/*",
+    "https://*.redditmedia.com/*"
   ],
   "background": {
     "service_worker": "background.bundle.js"
   },
   "action": {
     "default_popup": "popup.html",
+    "default_title": "Hivemind Overlay",
     "default_icon": {
       "16": "images/icon-16.png",
       "32": "images/icon-32.png",
@@ -31,16 +35,23 @@
   "content_scripts": [
     {
       "matches": [
-        "https://*.twitch.tv/*",
-        "https://*.youtube.com/*"
+        "https://*.twitch.tv/*"
       ],
       "js": ["content.bundle.js"],
-      "run_at": "document_end"
+      "run_at": "document_end",
+      "all_frames": true
     }
   ],
   "web_accessible_resources": [
     {
-      "resources": ["styles.css", "content.js", "popout.html", "popout.js", "emotion-radar.html", "emotion-radar.js"],
+      "resources": [
+        "styles.css",
+        "content.js",
+        "popout.html",
+        "popout.js",
+        "emotion-radar.html",
+        "emotion-radar.js"
+      ],
       "matches": ["<all_urls>"]
     }
   ],
@@ -48,5 +59,8 @@
     "16": "images/icon-16.png",
     "32": "images/icon-32.png",
     "128": "images/icon-128.png"
+  },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'"
   }
 }

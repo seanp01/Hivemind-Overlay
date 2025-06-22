@@ -216,7 +216,9 @@ messagesContainer.style.gap = '4px';
 messagesContainer.style.flex = '1 1 0'; // Allow to grow/shrink in flex layout
 messagesContainer.style.minWidth = '0';
 messagesContainer.style.minHeight = '300px';
-messagesContainer.style.margin = '10px'
+messagesContainer.style.width = '100%';
+messagesContainer.style.margin = '10px';
+messagesContainer.style.padding = '10px';
 
 const timeFrames = [
     { label: '10s', value: 10 },
@@ -313,7 +315,7 @@ let leftOverlayColumnContainer = document.createElement('div');
 leftOverlayColumnContainer.style.display = 'flex';
 leftOverlayColumnContainer.style.flexDirection = 'column';
 leftOverlayColumnContainer.style.width = '80%';
-leftOverlayColumnContainer.style.height = '100%';
+leftOverlayColumnContainer.style.height = '800px';
 leftOverlayColumnContainer.style.left = '0';
 leftOverlayColumnContainer.style.alignItems = 'stretch'; // Ensures children stack vertically and fill width
 
@@ -329,13 +331,17 @@ sentimentSummaryContainer.style.display = 'flex';
 sentimentSummaryContainer.style.flexDirection = 'row';
 sentimentSummaryContainer.style.alignItems = 'left';
 sentimentSummaryContainer.style.gap = '24px';
+//sentimentSummaryContainer.style.overflowX = 'scroll';
 
 // Create a flex row container to hold sentiment summary and radar side by side
 const summaryRadarRow = document.createElement('div');
 summaryRadarRow.style.display = 'flex';
 summaryRadarRow.style.flexDirection = 'row';
 summaryRadarRow.style.alignItems = 'center';
+summaryRadarRow.style.width = '100%';
+summaryRadarRow.style.overflowX = 'scroll';
 summaryRadarRow.style.marginLeft = '10px';
+summaryRadarRow.style.paddingTop = '10px';
 
 // Move sentimentSummaryContainer into the row
 summaryRadarRow.appendChild(sentimentSummaryContainer);
@@ -356,7 +362,7 @@ radarContainer.style.height = '100%';
 
 const radarIframe = document.createElement('iframe');
 radarIframe.src = chrome.runtime.getURL('emotion-radar.html');
-radarIframe.style.width = '300px';
+radarIframe.style.width = '20%';
 radarIframe.style.height = '300px';
 radarIframe.style.right = 0;
 radarIframe.style.margin = '10px';
@@ -427,6 +433,9 @@ overlayRowContainer.style.alignItems = 'flex-start';
 
 // Media embed column container
 let mediaEmbedColumnContainer = document.createElement('div');
+// Make embeds stack from top to bottom (newest at top)
+mediaEmbedColumnContainer.style.display = 'flex';
+mediaEmbedColumnContainer.style.flexDirection = 'column-reverse';
 mediaEmbedColumnContainer.style.background = 'rgba(30,30,30,0.85)';
 mediaEmbedColumnContainer.style.borderRadius = '8px';
 mediaEmbedColumnContainer.id = 'hivemind-media-embeds';
@@ -434,11 +443,16 @@ mediaEmbedColumnContainer.style.display = 'flex';
 mediaEmbedColumnContainer.style.flexDirection = 'column';
 mediaEmbedColumnContainer.style.gap = '8px';
 mediaEmbedColumnContainer.style.flex = '1 1 0';
-mediaEmbedColumnContainer.style.height = '600px';
-mediaEmbedColumnContainer.style.maxWidth = '300px';
-mediaEmbedColumnContainer.style.overflowY = 'auto';
-mediaEmbedColumnContainer.style.minWidth = '0';
-mediaEmbedColumnContainer.style.margin = '10px';
+mediaEmbedColumnContainer.style.height = leftOverlayColumnContainer.style.height;
+mediaEmbedColumnContainer.style.overflowY = 'scroll';
+mediaEmbedColumnContainer.style.width = '80%';
+mediaEmbedColumnContainer.style.marginTop = '10px';
+mediaEmbedColumnContainer.style.marginBottom = '10px';
+mediaEmbedColumnContainer.style.marginRight = '10px';
+mediaEmbedColumnContainer.style.marginLeft = '20px';
+mediaEmbedColumnContainer.style.paddingLeft = '10px';
+mediaEmbedColumnContainer.style.paddingRight = '10px';
+mediaEmbedColumnContainer.style.alignItems = 'stretch';
 
 // Add left and right columns to the row container
 overlayRowContainer.appendChild(leftOverlayColumnContainer);
@@ -458,6 +472,7 @@ sliderBarContainer.style.background = 'rgba(30,30,30,0.85)';
 sliderBarContainer.style.borderRadius = '8px';
 sliderBarContainer.style.gap = '4px';
 sliderBarContainer.style.margin = '10px';
+sliderBarContainer.style.padding = '10px';
 
 // Vertical slider
 const timeSlider = document.createElement('input');
@@ -466,7 +481,7 @@ timeSlider.min = 0;
 timeSlider.max = 99;
 timeSlider.value = 99;
 timeSlider.step = 1;
-timeSlider.style.width = '89.5%';  
+timeSlider.style.width = '89%';  
 timeSlider.style.height = '12px';  // Typical slider height
 timeSlider.style.margin = '8px auto';
 timeSlider.style.display = 'block';
@@ -477,12 +492,47 @@ timeSlider.style.setProperty('accent-color', 'grey');
 
 // Vertical bar chart container
 const barChartContainer = document.createElement('div');
+barChartContainer.style.background = 'rgba(43, 43, 43, 0.89)';
 barChartContainer.style.display = 'flex';
 barChartContainer.style.flexDirection = 'row';
 barChartContainer.style.alignItems = 'flex-end';
 barChartContainer.style.height = '60px'; // Height of the bars
 barChartContainer.style.width = '88%';
 barChartContainer.style.gap = '1px';
+barChartContainer.style.position = 'relative';
+
+// Add a background grid lines container so lines are always behind bars
+const barChartGridLines = document.createElement('div');
+barChartGridLines.style.position = 'absolute';
+barChartGridLines.style.left = '0';
+barChartGridLines.style.top = '0';
+barChartGridLines.style.width = '100%';
+barChartGridLines.style.height = '100%';
+barChartGridLines.style.pointerEvents = 'none';
+barChartGridLines.style.zIndex = '0';
+
+// Add three horizontal chart lines (grid lines)
+for (let i = 0; i < 3; i++) {
+    const line = document.createElement('div');
+    line.style.position = 'absolute';
+    line.style.left = '0';
+    line.style.width = '100%';
+    line.style.height = '1px';
+    line.style.background = 'black';
+    line.style.opacity = '0.2';
+    line.style.pointerEvents = 'none';
+    // Position lines at 0%, 50%, 100% from the top
+    if (i === 0) {
+        line.style.top = '0';
+    } else if (i === 1) {
+        line.style.top = '50%';
+        line.style.transform = 'translateY(-0.5px)';
+    } else {
+        line.style.bottom = '0';
+    }
+    barChartGridLines.appendChild(line);
+}
+barChartContainer.appendChild(barChartGridLines);
 // Center the bar chart horizontally in the window
 barChartContainer.style.marginLeft = 'auto';
 barChartContainer.style.marginRight = 'auto';
@@ -501,7 +551,7 @@ barChartEmojiRow.style.gap = '1px';
 const sliderTicksContainer = document.createElement('div');
 sliderTicksContainer.style.display = 'flex';
 sliderTicksContainer.style.justifyContent = 'space-between';
-sliderTicksContainer.style.width = '90%';
+sliderTicksContainer.style.width = '89%';
 sliderTicksContainer.style.fontSize = '11px';
 sliderTicksContainer.style.color = '#bbb';
 sliderTicksContainer.style.marginTop = '-4px'; // Pull closer to slider
@@ -520,6 +570,8 @@ yAxisContainer.style.fontSize = '12px';
 yAxisContainer.style.color = '#bbb';
 yAxisContainer.style.textAlign = 'right';
 yAxisContainer.style.userSelect = 'none';
+yAxisContainer.style.marginLeft = '10px';
+yAxisContainer.style.marginTop = '10px';
 
 // Create y-axis line with ticks
 const yAxisLineContainer = document.createElement('div');
@@ -575,9 +627,10 @@ const barChartRow = document.createElement('div');
 barChartRow.style.display = 'flex';
 barChartRow.style.flexDirection = 'row';
 barChartRow.style.alignItems = 'flex-end';
-barChartRow.style.marginTop = '5px';
-// Position yAxisContainer absolutely to the left of the bar chart
+barChartRow.style.marginTop = '20px';
+barChartRow.style.padding = '10px';
 barChartRow.style.position = 'relative';
+
 yAxisContainer.style.position = 'absolute';
 yAxisContainer.style.left = '0';
 yAxisContainer.style.top = '0';
@@ -723,15 +776,18 @@ updateTimelineLabels();
 // Pie chart canvas
 const pieCanvas = document.createElement('canvas');
 pieCanvas.id = 'sentiment-pie';
-pieCanvas.style.width = '900px';
+// Remove fixed width/height styles that may interfere with centering
+pieCanvas.style.display = 'block';
+pieCanvas.style.margin = '0 auto';
+pieCanvas.style.width = '1200px';
 pieCanvas.style.height = '300px';
-pieCanvas.width = 900;
-pieCanvas.height = 300;
-pieCanvas.setAttribute('style', 'width:80% !important; height:300px !important; display:block;');
 
 const pieWrapper = document.createElement('div');
-pieWrapper.style.width = '70%';
+pieWrapper.style.width = '1200px';
 pieWrapper.style.height = '320px';
+pieWrapper.style.display = 'flex';
+pieWrapper.style.justifyContent = 'left';
+pieWrapper.style.alignItems = 'center';
 pieWrapper.style.overflow = 'hidden';
 pieWrapper.appendChild(pieCanvas);
 sentimentSummaryContainer.style.alignItems = 'center'; // helps vertically align
@@ -741,27 +797,6 @@ sentimentSummaryContainer.appendChild(radarIframe);
 //sentimentSummaryContainer.appendChild(movementArrowList);
 
 let chatPaused = false;
-
-let windowEmbeds = [];
-function updateEmbedsForWindow() {
-    // Remove all current embeds
-    mediaEmbedColumnContainer.innerHTML = '';
-    // Collect all unique URLs from messages in the current window
-    const urlSet = new Set();
-    windowMessages.forEach(msg => {
-        if (typeof msg.message === "string") {
-            const urlRegex = /(https?:\/\/[^\s]+)/g;
-            const urls = msg.message.match(urlRegex);
-            if (urls) {
-                urls.forEach(url => urlSet.add(url));
-            }
-        }
-    });
-    // Add embeds for all URLs in the window
-    if (urlSet.size > 0) {
-        addEmbedToOverlay(Array.from(urlSet));
-    }
-}
 
 const chatClient = new ChatClient('twitch'); // or 'youtube'
 chatClient.on('message', (msg) => {
@@ -773,25 +808,6 @@ chatClient.on('message', (msg) => {
         if (urls) {
             addEmbedToOverlay(urls);
         }
-        // Special handling for X/Twitter and Wikipedia links
-        urls && urls.forEach(url => {
-            // X/Twitter embed
-            if (/^(https?:\/\/)?(x\.com|twitter\.com)\/[^\/]+\/status\/\d+/i.test(url)) {
-                // Use publish.twitter.com embed
-                const tweetIdMatch = url.match(/status\/(\d+)/);
-                if (tweetIdMatch) {
-                    const tweetId = tweetIdMatch[1];
-                    const embedUrl = `https://twitframe.com/show?url=${encodeURIComponent(url)}`;
-                    addEmbedToOverlay([embedUrl]);
-                }
-            }
-            // Wikipedia preview (simple iframe)
-            if (/^https?:\/\/([a-z]+\.)?wikipedia\.org\/wiki\/[^ ]+/i.test(url)) {
-                // Show a preview iframe for Wikipedia
-                const wikiEmbedUrl = url.replace(/#.*/, ''); // Remove fragment
-                addEmbedToOverlay([wikiEmbedUrl]);
-            }
-        });
     }
     bufferMessage(msg);
     if (
@@ -838,52 +854,153 @@ chrome.runtime.sendMessage(
     }
 );
 /**
- * Track embed expiration and deduplication.
+ * Track embed timestamps for deduplication and time-window filtering.
  */
-const embedExpirySeconds = 300; // 5 minutes
 const embedTimestamps = new Map();
 
 /**
- * Periodically remove expired embeds.
+ * Updates the embeds shown in the overlay to match the current time window.
+ * Only embeds from messages within the selectedTimeFrame are shown.
+ * Only updates the DOM if there are changes (add/remove).
  */
-setInterval(() => {
-    const now = Date.now();
-    // Remove expired embeds from DOM and map
-    Array.from(embedTimestamps.entries()).forEach(([url, ts]) => {
-        if (now - ts > embedExpirySeconds * 1000) {
-            // Remove from DOM
-            Array.from(mediaEmbedColumnContainer.children).forEach(child => {
-                if (
-                    (child.tagName === 'IFRAME' || child.tagName === 'IMG' || child.tagName === 'VIDEO' || child.tagName === 'A')
-                    && (child.src === url || child.href === url)
-                ) {
-                    child.remove();
-                }
-            });
-            embedTimestamps.delete(url);
+function updateEmbedsForWindow() {
+    // Collect all unique URLs from messages in the current window, in order from newest to oldest
+    const urlSet = [];
+    windowMessages.slice().reverse().forEach(msg => {
+        if (typeof msg.message === "string") {
+            const urlRegex = /(https?:\/\/[^\s]+)/g;
+            const urls = msg.message.match(urlRegex);
+            if (urls) {
+                urls.forEach(url => {
+                    const embedUrl = getEmbedUrl(url);
+                    if (!urlSet.includes(embedUrl)) urlSet.push(embedUrl);
+                });
+            }
         }
     });
-}, 10_000); // Check every 10 seconds
 
-// Patch addEmbedToOverlay to handle deduplication and expiration
+    // Remove embeds not in the window (regardless of order)
+    const currentChildren = Array.from(mediaEmbedColumnContainer.children);
+    currentChildren.forEach(child => {
+        let url = null;
+        if (child.tagName === 'IMG' || child.tagName === 'VIDEO' || child.tagName === 'IFRAME') {
+            url = child.src;
+        } else if (child.tagName === 'A' && child.href) {
+            url = child.href;
+        } else if (
+            child.tagName === 'DIV' &&
+            child.innerHTML &&
+            child.innerHTML.includes('🐦 @')
+        ) {
+            const match = child.innerHTML.match(/ID: (\d+)/);
+            if (match) {
+                url = getEmbedUrl(`https://twitter.com/i/web/status/${match[1]}`);
+            }
+        }
+        if (url && !urlSet.includes(url)) {
+            child.remove();
+        }
+    });
+
+    // Now, ensure the embeds are in the correct order (newest at top)
+    // Build a map of url -> element for current children
+    const urlToElement = {};
+    Array.from(mediaEmbedColumnContainer.children).forEach(child => {
+        let url = null;
+        if (child.tagName === 'IMG' || child.tagName === 'VIDEO' || child.tagName === 'IFRAME') {
+            url = child.src;
+        } else if (child.tagName === 'A' && child.href) {
+            url = child.href;
+        } else if (
+            child.tagName === 'DIV' &&
+            child.innerHTML &&
+            child.innerHTML.includes('🐦 @')
+        ) {
+            const match = child.innerHTML.match(/ID: (\d+)/);
+            if (match) {
+                url = getEmbedUrl(`https://twitter.com/i/web/status/${match[1]}`);
+            }
+        }
+        if (url) urlToElement[url] = child;
+    });
+
+    // Remove all children (will re-add in correct order)
+    while (mediaEmbedColumnContainer.firstChild) {
+        mediaEmbedColumnContainer.removeChild(mediaEmbedColumnContainer.firstChild);
+    }
+
+    // Add in order: newest at top (first in urlSet)
+    urlSet.forEach(url => {
+        if (urlToElement[url]) {
+            mediaEmbedColumnContainer.appendChild(urlToElement[url]);
+        } else {
+            addEmbedToOverlay([url]);
+        }
+    });
+}
+
+function getEmbedUrl(url) {
+    // YouTube
+    if (/youtube\.com\/watch\?v=|youtu\.be\//i.test(url)) {
+        let videoId = null;
+        const ytMatch = url.match(/(?:v=|youtu\.be\/)([A-Za-z0-9_\-]+)/);
+        if (ytMatch) videoId = ytMatch[1];
+        if (videoId) return `https://www.youtube.com/embed/${videoId}`;
+    }
+    // TikTok
+    if (/tiktok\.com\/(@[\w.-]+\/video\/\d+)/i.test(url)) {
+        const match = url.match(/video\/(\d+)/);
+        if (match) return `https://www.tiktok.com/embed/${match[1]}`;
+    }
+    // Twitch VOD
+    if (/twitch\.tv\/videos\/(\d+)/i.test(url)) {
+        const match = url.match(/twitch\.tv\/videos\/(\d+)/i);
+        const videoId = match ? match[1] : null;
+        if (videoId) {
+            return `https://player.twitch.tv/?video=${videoId}&parent=${window.location.hostname}`;
+        } else {
+            return url;
+        }
+    }
+    // Wikipedia article
+    if (/^https?:\/\/([a-z]+\.)?wikipedia\.org\/wiki\/[^ ]+/i.test(url)) {
+        // Remove fragment for cleaner preview
+        return url.replace(/#.*/, '');
+    }
+    // Instagram post
+    if (/instagram\.com\/p\/[\w-]+/i.test(url)) {
+        const match = url.match(/instagram\.com\/p\/([\w-]+)/i);
+        if (match) {
+            return `https://www.instagram.com/p/${match[1]}/embed`;
+        }
+    }
+    // MP4
+    if (/\.mp4$/i.test(url)) return url;
+    // ...add other platforms as needed...
+    return url;
+}
+
+// Patch addEmbedToOverlay to handle deduplication for the current window only
 const origAddEmbedToOverlay = addEmbedToOverlay;
 addEmbedToOverlay = function(urls) {
-    const now = Date.now();
-    urls.forEach(url => {
-        // Remove existing embed if present (for replenishing)
-        Array.from(mediaEmbedColumnContainer.children).forEach(child => {
-            if (
-                (child.tagName === 'IFRAME' || child.tagName === 'IMG' || child.tagName === 'VIDEO' || child.tagName === 'A')
-                && (child.src === url || child.href === url)
-            ) {
-                child.remove();
-                embedTimestamps.delete(url);
-            }
-        });
-        // Add/re-add embed and update timestamp
-        embedTimestamps.set(url, now);
+    // Only add embeds that are not already present
+    const currentChildren = Array.from(mediaEmbedColumnContainer.children);
+    const currentUrls = new Set();
+    currentChildren.forEach(child => {
+        let url = null;
+        if (child.tagName === 'IMG' || child.tagName === 'VIDEO' || child.tagName === 'IFRAME') {
+            url = child.src;
+        } else if (child.tagName === 'A' && child.href) {
+            url = child.href;
+        }
+        if (url) currentUrls.add(url);
     });
-    origAddEmbedToOverlay(urls);
+
+    // Only add new embeds
+    const urlsToAdd = urls.filter(url => !currentUrls.has(url));
+    if (urlsToAdd.length > 0) {
+        origAddEmbedToOverlay(urlsToAdd);
+    }
 };
 
 /**
@@ -898,10 +1015,11 @@ function addEmbedToOverlay(urls) {
             embedElement.src = url;
             embedElement.style.margin = '4px';
         }
-        // YouTube video
-        else if (/youtube\.com\/watch\?v=|youtu\.be\//i.test(url)) {
+        // YouTube video or Shorts
+        else if (/youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/shorts\//i.test(url)) {
             let videoId = null;
-            const ytMatch = url.match(/(?:v=|youtu\.be\/)([A-Za-z0-9_\-]+)/);
+            // Match normal videos and shorts
+            const ytMatch = url.match(/(?:v=|youtu\.be\/|shorts\/)([A-Za-z0-9_\-]+)/);
             if (ytMatch) videoId = ytMatch[1];
             if (videoId) {
                 embedElement = document.createElement('iframe');
@@ -912,16 +1030,19 @@ function addEmbedToOverlay(urls) {
                 embedElement.style.margin = '4px';
             }
         }
-        // Twitch VOD
+        // // Twitch VOD
         else if (/twitch\.tv\/videos\/(\d+)/i.test(url)) {
-            const twitchMatch = url.match(/twitch\.tv\/videos\/(\d+)/i);
-            if (twitchMatch) {
-                embedElement = document.createElement('iframe');
-                embedElement.src = `https://player.twitch.tv/?video=${twitchMatch[1]}&parent=${location.hostname}`;
-                embedElement.frameBorder = "0";
-                embedElement.allowFullscreen = true;
-                embedElement.style.margin = '4px';
+            const match = url.match(/twitch\.tv\/videos\/(\d+)/i);
+            const videoId = match ? match[1] : null;
+            embedElement = document.createElement('iframe');
+            if (videoId) {
+                embedElement.src = `https://player.twitch.tv/?video=${videoId}&parent=${window.location.hostname}`;
+            } else {
+                embedElement.src = url;
             }
+            embedElement.frameBorder = "0";
+            embedElement.allowFullscreen = true;
+            embedElement.style.margin = '4px';
         }
         // MP4 video
         else if (/\.mp4$/i.test(url)) {
@@ -930,14 +1051,35 @@ function addEmbedToOverlay(urls) {
             embedElement.controls = true;
             embedElement.style.margin = '4px';
         }
-        // X/Twitter post
+        // X/Twitter post - simple preview without API
         else if (/^(https?:\/\/)?(x\.com|twitter\.com)\/[^\/]+\/status\/\d+/i.test(url)) {
-            // Use twitframe.com to embed tweets without loading external JS
-            embedElement = document.createElement('iframe');
-            embedElement.src = `https://twitframe.com/show?url=${encodeURIComponent(url)}`;
-            embedElement.frameBorder = "0";
-            embedElement.allowFullscreen = true;
+            // Deduplicate: track shown tweet IDs in a Set
+            if (!addEmbedToOverlay.shownTweets) addEmbedToOverlay.shownTweets = new Set();
+            const urlMatch = url.match(/(?:x\.com|twitter\.com)\/([^\/]+)\/status\/(\d+)/);
+            const tweetId = urlMatch ? urlMatch[2] : '';
+            if (tweetId && addEmbedToOverlay.shownTweets.has(tweetId)) return;
+            if (tweetId) addEmbedToOverlay.shownTweets.add(tweetId);
+
+            // Create a text preview without using external APIs
+            embedElement = document.createElement('div');
             embedElement.style.margin = '4px';
+            embedElement.style.padding = '8px';
+            embedElement.style.background = 'rgba(29, 161, 242, 0.1)';
+            embedElement.style.border = '1px solid rgba(29, 161, 242, 0.3)';
+            embedElement.style.borderRadius = '8px';
+            embedElement.style.fontSize = '12px';
+            embedElement.style.color = '#fff';
+            
+            const username = urlMatch ? urlMatch[1] : 'user';
+            
+            embedElement.innerHTML = `
+            <div style="font-weight: bold; margin-bottom: 4px;">🐦 @${username}</div>
+            <div style="margin-bottom: 4px;">X/Twitter Post</div>
+            <div style="font-size: 10px; color: #aaa; margin-bottom: 4px;">ID: ${tweetId}</div>
+            <div style="margin-top: 4px; opacity: 0.7;">
+                <a href="${url}" target="_blank" style="color: #1DA1F2; text-decoration: none;">View on X/Twitter →</a>
+            </div>
+            `;
         }
         // TikTok video
         else if (/tiktok\.com\/(@[\w.-]+\/video\/\d+)/i.test(url)) {
@@ -974,19 +1116,19 @@ function addEmbedToOverlay(urls) {
         // Facebook post
         else if (/facebook\.com\/[^\/]+\/posts\/\d+/i.test(url)) {
             embedElement = document.createElement('iframe');
-            embedElement.src = `https://www.facebook.com/plugins/post.php?href=${encodeURIComponent(url)}`;
+            embedElement.src = `https://www.facebook.com/plugins/post.php?href=${url}`;
             embedElement.frameBorder = "0";
             embedElement.allowFullscreen = true;
             embedElement.style.margin = '4px';
         }
         // Reddit post
-        else if (/reddit\.com\/r\/[\w\d_]+\/comments\/[\w\d]+/i.test(url)) {
-            embedElement = document.createElement('iframe');
-            embedElement.src = `https://www.redditmedia.com${url.replace(/^https?:\/\/(www\.)?reddit\.com/, '')}`;
-            embedElement.frameBorder = "0";
-            embedElement.allowFullscreen = true;
-            embedElement.style.margin = '4px';
-        }
+        // else if (/reddit\.com\/r\/[\w\d_]+\/comments\/[\w\d]+/i.test(url)) {
+        //     embedElement = document.createElement('iframe');
+        //     embedElement.src = `https://www.redditmedia.com${url.replace(/^https?:\/\/(www\.)?reddit\.com/, '')}`;
+        //     embedElement.frameBorder = "0";
+        //     embedElement.allowFullscreen = true;
+        //     embedElement.style.margin = '4px';
+        // }
         // Bluesky post
         else if (/bsky\.app\/profile\/[^\/]+\/post\/[\w\d]+/i.test(url)) {
             embedElement = document.createElement('iframe');
@@ -1018,19 +1160,98 @@ function addEmbedToOverlay(urls) {
             embedElement.href = url;
             embedElement.target = '_blank';
             embedElement.rel = 'noopener noreferrer';
-            embedElement.textContent = url.replace(/^https?:\/\//, '').split(/[/?#]/)[0];
-            embedElement.style.display = 'inline-block';
-            embedElement.style.margin = '4px';
-            embedElement.style.fontSize = '12px';
+            embedElement.style.display = 'flex';
+            embedElement.style.alignItems = 'center';
+            embedElement.style.gap = '10px';
+            embedElement.style.margin = '6px 0';
+            embedElement.style.padding = '8px 12px';
+            embedElement.style.borderRadius = '10px';
+            embedElement.style.background = 'rgba(76,195,247,0.08)';
+            embedElement.style.boxShadow = '0 2px 8px #0001';
+            embedElement.style.fontSize = '13px';
             embedElement.style.color = '#4FC3F7';
-            embedElement.style.textDecoration = 'underline';
+            embedElement.style.textDecoration = 'none';
+            embedElement.style.maxWidth = '350px';
+            embedElement.style.overflow = 'hidden';
+
+            // Try to add a thumbnail for news/articles
+            let thumbUrl = '';
+            // Common news/article domains
+            if (/nytimes\.com|cnn\.com|bbc\.co\.uk|bbc\.com|washingtonpost\.com|theguardian\.com|reuters\.com|bloomberg\.com|npr\.org|forbes\.com|wsj\.com|apnews\.com|aljazeera\.com|cnbc\.com|foxnews\.com|abcnews\.go\.com|news\.yahoo\.com|usatoday\.com|nbcnews\.com|politico\.com|vox\.com|axios\.com|theverge\.com|techcrunch\.com|wired\.com|engadget\.com|arstechnica\.com|nature\.com|sciencemag\.org|scientificamerican\.com/i.test(url)) {
+                // Use favicon as a fallback thumbnail
+                try {
+                    const domain = url.match(/^https?:\/\/([^\/?#]+)/i)[1];
+                    thumbUrl = `https://www.google.com/s2/favicons?domain=${domain}&sz=64`;
+                } catch {}
+            }
+            // Wikipedia: use logo
+            if (/wikipedia\.org/i.test(url)) {
+                thumbUrl = 'https://en.wikipedia.org/static/favicon/wikipedia.ico';
+            }
+            // Generic fallback: favicon
+            if (!thumbUrl) {
+                try {
+                    const domain = url.match(/^https?:\/\/([^\/?#]+)/i)[1];
+                    thumbUrl = `https://www.google.com/s2/favicons?domain=${domain}&sz=64`;
+                } catch {}
+            }
+            if (thumbUrl) {
+                const img = document.createElement('img');
+                img.src = thumbUrl;
+                img.alt = 'Site';
+                img.style.width = '28px';
+                img.style.height = '28px';
+                img.style.borderRadius = '6px';
+                img.style.objectFit = 'cover';
+                img.style.flexShrink = '0';
+                embedElement.appendChild(img);
+            }
+
+            // Show domain and a "News" badge if likely a news site
+            const domain = url.replace(/^https?:\/\//, '').split(/[/?#]/)[0];
+            const textDiv = document.createElement('div');
+            textDiv.style.display = 'flex';
+            textDiv.style.flexDirection = 'column';
+            textDiv.style.overflow = 'hidden';
+
+            const domainSpan = document.createElement('span');
+            domainSpan.textContent = domain;
+            domainSpan.style.fontWeight = 'bold';
+            domainSpan.style.color = '#2196F3';
+            domainSpan.style.fontSize = '13px';
+            domainSpan.style.overflow = 'hidden';
+            domainSpan.style.textOverflow = 'ellipsis';
+            domainSpan.style.whiteSpace = 'nowrap';
+            textDiv.appendChild(domainSpan);
+
+            // Add "News" badge if domain matches news
+            if (/nytimes\.com|cnn\.com|bbc\.co\.uk|bbc\.com|washingtonpost\.com|theguardian\.com|reuters\.com|bloomberg\.com|npr\.org|forbes\.com|wsj\.com|apnews\.com|aljazeera\.com|cnbc\.com|foxnews\.com|abcnews\.go\.com|news\.yahoo\.com|usatoday\.com|nbcnews\.com|politico\.com|vox\.com|axios\.com|theverge\.com|techcrunch\.com|wired\.com|engadget\.com|arstechnica\.com|nature\.com|sciencemag\.org|scientificamerican\.com/i.test(domain)) {
+                const badge = document.createElement('span');
+                badge.textContent = 'News';
+                badge.style.background = '#2196F3';
+                badge.style.color = '#fff';
+                badge.style.fontSize = '10px';
+                badge.style.fontWeight = 'bold';
+                badge.style.borderRadius = '6px';
+                badge.style.padding = '1px 6px';
+                badge.style.marginTop = '2px';
+                badge.style.display = 'inline-block';
+                textDiv.appendChild(badge);
+            }
+
+            embedElement.appendChild(textDiv);
         }
         if (embedElement) {
-            embedElement.style.maxWidth = '250px';
-            embedElement.style.maxHeight = '200px';
             embedElement.style.objectFit = 'contain';
-            embedElement.style.display = 'inline-block';
-            mediaEmbedColumnContainer.appendChild(embedElement);
+            embedElement.style.display = 'block';
+            embedElement.style.height = 'auto'; // Only as tall as needed for content
+            embedElement.style.maxHeight = '';  // Remove any max height restriction
+            // Insert at the top so newest embeds appear first
+            if (mediaEmbedColumnContainer.firstChild) {
+                mediaEmbedColumnContainer.insertBefore(embedElement, mediaEmbedColumnContainer.firstChild);
+            } else {
+                mediaEmbedColumnContainer.appendChild(embedElement);
+            }
         }
     });
 }
@@ -1124,6 +1345,7 @@ function renderMessageElement(message) {
     const messageElement = document.createElement('div');
     messageElement.style.display = 'flex';
     messageElement.style.alignItems = 'center';
+    messageElement.style.padding = '4px 8px';
     messageElement.style.justifyContent = 'space-between';
     messageElement.appendChild(leftContainer);
     messageElement.appendChild(rightContainer);
@@ -1212,6 +1434,7 @@ function updateBarChart() {
     yAxisContainer.appendChild(yAxisLabelsContainer);
     yAxisContainer.appendChild(yAxisLineContainer);
     barChartContainer.innerHTML = '';
+    barChartContainer.appendChild(barChartGridLines);
     barChartEmojiRow.innerHTML = '';
     // Reset static variables for lock/unlock emoji
     updateBarChart.firstLockShown = false;
@@ -1391,7 +1614,7 @@ function updatePieChart(sentimentCounts) {
                             if (!legendClickState.lastClickTime) legendClickState.lastClickTime = 0;
                             if (legendClickState.lastClickIndex === undefined || legendClickState.lastClickIndex === null) legendClickState.lastClickIndex = -1;
                             const now = Date.now();
-                            const DOUBLE_CLICK_MS = 250;
+                            const DOUBLE_CLICK_MS = 500;
                             const chart = legend.chart;
                             const index = legendItem.index;
                             const sentiment = chart.data.labels[index]
@@ -1575,7 +1798,7 @@ function updatePieChartForWindow() {
     });
 
     if (!chatPaused) updatePieChart(windowSentimentCounts);
-    //updateEmbedsForWindow()
+    if (!chatPaused) updateEmbedsForWindow()
 }
 
 // --- Ranking List with Up/Down Arrows ---

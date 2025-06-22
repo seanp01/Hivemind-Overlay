@@ -43,7 +43,8 @@ class ChatClient {
 
             this.twitchClient.on('message', async (channel, tags, message, self) => {
                 if (self) return; // Ignore echoed messages
-
+                let user = tags['display-name'] || tags.username;
+                if (user === 'Fossabot' || user === 'StreamElements' || user === 'Nightbot') return;
                 const autoLabeledMessage = await this.autoLabelMessage(message, tags);
                 if (autoLabeledMessage) {
                     this.emit('message', autoLabeledMessage);
