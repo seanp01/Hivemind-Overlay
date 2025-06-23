@@ -31,8 +31,9 @@
     "webpack": "^5.99.9",
     "webpack-cli": "^4.10.0"
   },
-  "version": "1.27.0",
+  "version": "1.28.0",
   "changelog": {
+    "1.28.0": "Began implementing the viewer count via a twitch client that makes a call to the helix API. ~ Sean Parker",
     "1.27.0": "Updated the embed container and embed items. ~ Sean Parker",
     "1.26.0": "Updated the UI to use a grid configuration to support the message embeds and sentiment analysis together. ~ Sean Parker",
     "1.25.0": "Added more support for social media embeds. ~ Sean Parker",

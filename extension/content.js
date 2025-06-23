@@ -323,7 +323,6 @@ leftOverlayColumnContainer.style.alignItems = 'stretch'; // Ensures children sta
 const sentimentSummaryContainer = document.createElement('div');
 sentimentSummaryContainer.id = 'sentiment-summary';
 sentimentSummaryContainer.style.background = 'rgba(30,30,30,0.85)';
-sentimentSummaryContainer.style.marginBottom = '10px';
 sentimentSummaryContainer.style.width = '100%';
 sentimentSummaryContainer.style.marginTop = '10px';
 sentimentSummaryContainer.style.borderRadius = '8px';
@@ -331,7 +330,6 @@ sentimentSummaryContainer.style.display = 'flex';
 sentimentSummaryContainer.style.flexDirection = 'row';
 sentimentSummaryContainer.style.alignItems = 'left';
 sentimentSummaryContainer.style.gap = '24px';
-//sentimentSummaryContainer.style.overflowX = 'scroll';
 
 // Create a flex row container to hold sentiment summary and radar side by side
 const summaryRadarRow = document.createElement('div');
@@ -339,7 +337,7 @@ summaryRadarRow.style.display = 'flex';
 summaryRadarRow.style.flexDirection = 'row';
 summaryRadarRow.style.alignItems = 'center';
 summaryRadarRow.style.width = '100%';
-summaryRadarRow.style.overflowX = 'scroll';
+summaryRadarRow.style.overflowX = 'auto'; // Allow horizontal scrolling if needed
 summaryRadarRow.style.marginLeft = '10px';
 summaryRadarRow.style.paddingTop = '10px';
 
@@ -435,7 +433,7 @@ overlayRowContainer.style.alignItems = 'flex-start';
 let mediaEmbedColumnContainer = document.createElement('div');
 // Make embeds stack from top to bottom (newest at top)
 mediaEmbedColumnContainer.style.display = 'flex';
-mediaEmbedColumnContainer.style.flexDirection = 'column-reverse';
+mediaEmbedColumnContainer.style.flexDirection = 'column';
 mediaEmbedColumnContainer.style.background = 'rgba(30,30,30,0.85)';
 mediaEmbedColumnContainer.style.borderRadius = '8px';
 mediaEmbedColumnContainer.id = 'hivemind-media-embeds';
@@ -861,7 +859,7 @@ const embedTimestamps = new Map();
 /**
  * Updates the embeds shown in the overlay to match the current time window.
  * Only embeds from messages within the selectedTimeFrame are shown.
- * Only updates the DOM if there are changes (add/remove).
+ * Ensures embeds are in correct order (newest at top, oldest at bottom).
  */
 function updateEmbedsForWindow() {
     // Collect all unique URLs from messages in the current window, in order from newest to oldest
@@ -872,7 +870,7 @@ function updateEmbedsForWindow() {
             const urls = msg.message.match(urlRegex);
             if (urls) {
                 urls.forEach(url => {
-                    const embedUrl = getEmbedUrl(url);
+                    const embedUrl = getEmbedUrl(url); // always normalize!
                     if (!urlSet.includes(embedUrl)) urlSet.push(embedUrl);
                 });
             }
@@ -882,75 +880,100 @@ function updateEmbedsForWindow() {
     // Remove embeds not in the window (regardless of order)
     const currentChildren = Array.from(mediaEmbedColumnContainer.children);
     currentChildren.forEach(child => {
-        let url = null;
-        if (child.tagName === 'IMG' || child.tagName === 'VIDEO' || child.tagName === 'IFRAME') {
-            url = child.src;
-        } else if (child.tagName === 'A' && child.href) {
-            url = child.href;
-        } else if (
-            child.tagName === 'DIV' &&
-            child.innerHTML &&
-            child.innerHTML.includes('🐦 @')
-        ) {
-            const match = child.innerHTML.match(/ID: (\d+)/);
-            if (match) {
-                url = getEmbedUrl(`https://twitter.com/i/web/status/${match[1]}`);
-            }
-        }
+        const url = child.dataset.normalizedUrl;
         if (url && !urlSet.includes(url)) {
             child.remove();
         }
     });
 
-    // Now, ensure the embeds are in the correct order (newest at top)
-    // Build a map of url -> element for current children
+    // Build a map of normalized url -> element for current children
     const urlToElement = {};
     Array.from(mediaEmbedColumnContainer.children).forEach(child => {
-        let url = null;
-        if (child.tagName === 'IMG' || child.tagName === 'VIDEO' || child.tagName === 'IFRAME') {
-            url = child.src;
-        } else if (child.tagName === 'A' && child.href) {
-            url = child.href;
-        } else if (
-            child.tagName === 'DIV' &&
-            child.innerHTML &&
-            child.innerHTML.includes('🐦 @')
-        ) {
-            const match = child.innerHTML.match(/ID: (\d+)/);
-            if (match) {
-                url = getEmbedUrl(`https://twitter.com/i/web/status/${match[1]}`);
-            }
-        }
+        const url = child.dataset.normalizedUrl;
         if (url) urlToElement[url] = child;
     });
 
-    // Remove all children (will re-add in correct order)
-    while (mediaEmbedColumnContainer.firstChild) {
-        mediaEmbedColumnContainer.removeChild(mediaEmbedColumnContainer.firstChild);
-    }
-
-    // Add in order: newest at top (first in urlSet)
-    urlSet.forEach(url => {
-        if (urlToElement[url]) {
-            mediaEmbedColumnContainer.appendChild(urlToElement[url]);
+    // Track which URLs are still present after reordering
+    const seen = new Set();
+    // Insert/move embeds in the correct order (newest at top)
+    for (let i = urlSet.length - 1; i >= 0; i--) {
+        const url = urlSet[i];
+        let embedElement = urlToElement[url];
+        if (embedElement) {
+            // Only move if not already at the top
+            if (mediaEmbedColumnContainer.firstChild !== embedElement) {
+                mediaEmbedColumnContainer.insertBefore(embedElement, mediaEmbedColumnContainer.firstChild);
+            }
+            seen.add(url);
         } else {
             addEmbedToOverlay([url]);
+            // After adding, get the new element and mark as seen
+            const newChild = Array.from(mediaEmbedColumnContainer.children).find(child => child.dataset.normalizedUrl === url);
+            if (newChild) seen.add(url);
+        }
+    }
+    // Remove any embeds not in the current urlSet (not seen)
+    Array.from(mediaEmbedColumnContainer.children).forEach(child => {
+        const url = child.dataset.normalizedUrl;
+        if (url && !seen.has(url)) {
+            child.remove();
         }
     });
 }
 
 function getEmbedUrl(url) {
-    // YouTube
-    if (/youtube\.com\/watch\?v=|youtu\.be\//i.test(url)) {
+    // YouTube video (watch, short, youtu.be, embed)
+    if (
+        /youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/shorts\//i.test(url) ||
+        /youtube\.com\/embed\/[A-Za-z0-9_\-]+/i.test(url)
+    ) {
+        // Try to extract video ID from various formats
         let videoId = null;
-        const ytMatch = url.match(/(?:v=|youtu\.be\/)([A-Za-z0-9_\-]+)/);
+        // 1. /embed/VIDEOID
+        let ytMatch = url.match(/(?:embed\/)([A-Za-z0-9_\-]+)/);
         if (ytMatch) videoId = ytMatch[1];
-        if (videoId) return `https://www.youtube.com/embed/${videoId}`;
+        // 2. /watch?v=VIDEOID
+        if (!videoId) {
+            ytMatch = url.match(/[?&]v=([A-Za-z0-9_\-]+)/);
+            if (ytMatch) videoId = ytMatch[1];
+        }
+        // 3. youtu.be/VIDEOID
+        if (!videoId) {
+            ytMatch = url.match(/youtu\.be\/([A-Za-z0-9_\-]+)/);
+            if (ytMatch) videoId = ytMatch[1];
+        }
+        // 4. /shorts/VIDEOID
+        if (!videoId) {
+            ytMatch = url.match(/shorts\/([A-Za-z0-9_\-]+)/);
+            if (ytMatch) videoId = ytMatch[1];
+        }
+        if (videoId) {
+            // Use the current window's origin for deduplication and embedding
+            return `https://www.youtube.com/embed/${videoId}?origin=${encodeURIComponent(window.location.origin)}`;
+        }
+    }
+    // YouTube channel/profile (not a video)
+    if (/youtube\.com\/(channel|user|c|@)[^\/\s]+/i.test(url)) {
+        // Track but do not embed as video
+        return url;
     }
     // TikTok
+    // TikTok video
     if (/tiktok\.com\/(@[\w.-]+\/video\/\d+)/i.test(url)) {
+        // Use the official TikTok embed format to avoid flickering
+        // https://www.tiktok.com/embed/v2/{videoId}?lang=en-US
         const match = url.match(/video\/(\d+)/);
-        if (match) return `https://www.tiktok.com/embed/${match[1]}`;
+        if (match) {
+            return `https://www.tiktok.com/embed/v2/${match[1]}?lang=en-US`;
+        }
+    }
+    // TikTok profile
+    if (/tiktok\.com\/@[\w.-]+\/?$/i.test(url)) {
+        // Remove trailing slash for consistency
+        const match = url.match(/tiktok\.com\/(@[\w.-]+)/i);
+        if (match) {
+            return `https://www.tiktok.com/${match[1]}`;
+        }
     }
     // Twitch VOD
     if (/twitch\.tv\/videos\/(\d+)/i.test(url)) {
@@ -974,6 +997,18 @@ function getEmbedUrl(url) {
             return `https://www.instagram.com/p/${match[1]}/embed`;
         }
     }
+    // Instagram profile
+    if (/instagram\.com\/([a-zA-Z0-9_.]+)\/?$/i.test(url) && !/\/p\//i.test(url)) {
+        const match = url.match(/instagram\.com\/([a-zA-Z0-9_.]+)\/?$/i);
+        if (match) {
+            return `https://www.instagram.com/${match[1]}/embed`;
+        }
+    }
+    // Wikipedia article
+    if (/^https?:\/\/([a-z]+\.)?wikipedia\.org\/wiki\/[^ ]+/i.test(url)) {
+        // Remove fragment for cleaner preview
+        return url.replace(/#.*/, '');
+    }
     // MP4
     if (/\.mp4$/i.test(url)) return url;
     // ...add other platforms as needed...
@@ -989,9 +1024,9 @@ addEmbedToOverlay = function(urls) {
     currentChildren.forEach(child => {
         let url = null;
         if (child.tagName === 'IMG' || child.tagName === 'VIDEO' || child.tagName === 'IFRAME') {
-            url = child.src;
+            url = getEmbedUrl(child.src);
         } else if (child.tagName === 'A' && child.href) {
-            url = child.href;
+            url = getEmbedUrl(child.href);
         }
         if (url) currentUrls.add(url);
     });
@@ -1015,22 +1050,47 @@ function addEmbedToOverlay(urls) {
             embedElement.src = url;
             embedElement.style.margin = '4px';
         }
-        // YouTube video or Shorts
-        else if (/youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/shorts\//i.test(url)) {
+        // Youtube videos
+        else if (
+            /youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/shorts\//i.test(url) ||
+            /youtube\.com\/embed\/[A-Za-z0-9_\-]+/i.test(url)
+        ) {
             let videoId = null;
-            // Match normal videos and shorts
-            const ytMatch = url.match(/(?:v=|youtu\.be\/|shorts\/)([A-Za-z0-9_\-]+)/);
+            let ytMatch = url.match(/(?:embed\/)([A-Za-z0-9_\-]+)/);
             if (ytMatch) videoId = ytMatch[1];
             if (videoId) {
                 embedElement = document.createElement('iframe');
-                embedElement.src = `https://www.youtube.com/embed/${videoId}`;
+                embedElement.src = url;
                 embedElement.frameBorder = "0";
                 embedElement.allow = "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture";
                 embedElement.allowFullscreen = true;
                 embedElement.style.margin = '4px';
             }
         }
-        // // Twitch VOD
+        // YouTube channel/profile
+        else if (/youtube\.com\/(channel|user|c|@)[^\/\s]+/i.test(url)) {
+            embedElement = document.createElement('a');
+            embedElement.href = url;
+            embedElement.target = '_blank';
+            embedElement.rel = 'noopener noreferrer';
+            embedElement.textContent = "View YouTube Channel/Profile";
+            embedElement.style.display = 'inline-block';
+            embedElement.style.margin = '4px';
+            embedElement.style.fontSize = '12px';
+            embedElement.style.color = '#FF0000';
+            embedElement.style.textDecoration = 'underline';
+        } else if (/^https?:\/\/youtu\.be\/[A-Za-z0-9_\-]+/i.test(url)) {
+            const match = url.match(/^https?:\/\/youtu\.be\/([A-Za-z0-9_\-]+)/i);
+            if (match) {
+                embedElement = document.createElement('iframe');
+                embedElement.src = `https://www.youtube.com/embed/${match[1]}?origin=${encodeURIComponent(window.location.origin)}`;
+                embedElement.frameBorder = "0";
+                embedElement.allow = "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture";
+                embedElement.allowFullscreen = true;
+                embedElement.style.margin = '4px';
+            }
+        }
+        // Twitch VOD
         else if (/twitch\.tv\/videos\/(\d+)/i.test(url)) {
             const match = url.match(/twitch\.tv\/videos\/(\d+)/i);
             const videoId = match ? match[1] : null;
@@ -1052,58 +1112,68 @@ function addEmbedToOverlay(urls) {
             embedElement.style.margin = '4px';
         }
         // X/Twitter post - simple preview without API
-        else if (/^(https?:\/\/)?(x\.com|twitter\.com)\/[^\/]+\/status\/\d+/i.test(url)) {
-            // Deduplicate: track shown tweet IDs in a Set
-            if (!addEmbedToOverlay.shownTweets) addEmbedToOverlay.shownTweets = new Set();
-            const urlMatch = url.match(/(?:x\.com|twitter\.com)\/([^\/]+)\/status\/(\d+)/);
-            const tweetId = urlMatch ? urlMatch[2] : '';
-            if (tweetId && addEmbedToOverlay.shownTweets.has(tweetId)) return;
-            if (tweetId) addEmbedToOverlay.shownTweets.add(tweetId);
-
-            // Create a text preview without using external APIs
+        else if (/^(https?:\/\/)?(x\.com|twitter\.com)\/[^\/]+\/status\/(\d+)/i.test(url)) {
+            // Extract username and tweet ID for display
+            const match = url.match(/(?:x\.com|twitter\.com)\/([^\/]+)\/status\/(\d+)/i);
+            const username = match ? match[1] : 'user';
+            const tweetId = match ? match[2] : '';
             embedElement = document.createElement('div');
             embedElement.style.margin = '4px';
             embedElement.style.padding = '8px';
             embedElement.style.background = 'rgba(29, 161, 242, 0.1)';
-            embedElement.style.border = '1px solid rgba(29, 161, 242, 0.3)';
             embedElement.style.borderRadius = '8px';
-            embedElement.style.fontSize = '12px';
-            embedElement.style.color = '#fff';
-            
-            const username = urlMatch ? urlMatch[1] : 'user';
-            
-            embedElement.innerHTML = `
-            <div style="font-weight: bold; margin-bottom: 4px;">🐦 @${username}</div>
-            <div style="margin-bottom: 4px;">X/Twitter Post</div>
-            <div style="font-size: 10px; color: #aaa; margin-bottom: 4px;">ID: ${tweetId}</div>
-            <div style="margin-top: 4px; opacity: 0.7;">
-                <a href="${url}" target="_blank" style="color: #1DA1F2; text-decoration: none;">View on X/Twitter →</a>
-            </div>
-            `;
+            embedElement.style.display = 'flex';
+            embedElement.style.alignItems = 'center';
+            embedElement.style.gap = '8px';
+            // Add a Twitter emoji and username
+            const icon = document.createElement('span');
+            icon.textContent = '🐦';
+            icon.style.fontSize = '20px';
+            icon.style.marginRight = '6px';
+            embedElement.appendChild(icon);
+            const userSpan = document.createElement('span');
+            userSpan.textContent = `@${username}`;
+            userSpan.style.fontWeight = 'bold';
+            userSpan.style.color = '#1da1f2';
+            embedElement.appendChild(userSpan);
+            // Add a link to the tweet
+            const link = document.createElement('a');
+            link.href = url;
+            link.target = '_blank';
+            link.rel = 'noopener noreferrer';
+            link.textContent = 'View Tweet';
+            link.style.marginLeft = '8px';
+            link.style.color = '#1da1f2';
+            link.style.textDecoration = 'underline';
+            embedElement.appendChild(link);
         }
         // TikTok video
-        else if (/tiktok\.com\/(@[\w.-]+\/video\/\d+)/i.test(url)) {
-            // Embed using TikTok's embed player
-            embedElement = document.createElement('iframe');
-            embedElement.src = `https://www.tiktok.com/embed/${url.match(/video\/(\d+)/)[1]}`;
-            embedElement.frameBorder = "0";
-            embedElement.allow = "encrypted-media";
-            embedElement.allowFullscreen = true;
+        else if (/tiktok\.com\/embed\/v2\/\d+\?lang=en-US/i.test(url)) {
+            // Already normalized embed URL
+            const match = url.match(/embed\/v2\/(\d+)/);
+            if (match) {
+                embedElement = document.createElement('iframe');
+                embedElement.src = url;
+                embedElement.frameBorder = "0";
+                embedElement.allow = "encrypted-media";
+                embedElement.allowFullscreen = true;
+                embedElement.style.margin = '4px';
+            }
+        }
+        // fallback for legacy direct video links (optional, for mp4s)
+        else if (/tiktokcdn.*\.mp4/i.test(url)) {
+            embedElement = document.createElement('video');
+            embedElement.src = url;
+            embedElement.controls = true;
             embedElement.style.margin = '4px';
         }
         // Threads post
         else if (/threads\.net\/@[\w.-]+\/post\/\d+/i.test(url)) {
-            // Threads does not have an official embed, so fallback to a link preview
-            embedElement = document.createElement('a');
-            embedElement.href = url;
-            embedElement.target = '_blank';
-            embedElement.rel = 'noopener noreferrer';
-            embedElement.textContent = "View on Threads";
-            embedElement.style.display = 'inline-block';
+            embedElement = document.createElement('iframe');
+            embedElement.src = url;
+            embedElement.frameBorder = "0";
+            embedElement.allowFullscreen = true;
             embedElement.style.margin = '4px';
-            embedElement.style.fontSize = '12px';
-            embedElement.style.color = '#4FC3F7';
-            embedElement.style.textDecoration = 'underline';
         }
         // Instagram post
         else if (/instagram\.com\/p\/[\w-]+/i.test(url)) {
@@ -1122,13 +1192,13 @@ function addEmbedToOverlay(urls) {
             embedElement.style.margin = '4px';
         }
         // Reddit post
-        // else if (/reddit\.com\/r\/[\w\d_]+\/comments\/[\w\d]+/i.test(url)) {
-        //     embedElement = document.createElement('iframe');
-        //     embedElement.src = `https://www.redditmedia.com${url.replace(/^https?:\/\/(www\.)?reddit\.com/, '')}`;
-        //     embedElement.frameBorder = "0";
-        //     embedElement.allowFullscreen = true;
-        //     embedElement.style.margin = '4px';
-        // }
+        else if (/reddit\.com\/r\/[\w\d_]+\/comments\/[\w\d]+/i.test(url)) {
+            embedElement = document.createElement('iframe');
+            embedElement.src = `https://www.redditmedia.com${url.replace(/^https?:\/\/(www\.)?reddit\.com/, '')}`;
+            embedElement.frameBorder = "0";
+            embedElement.setAttribute('allowfullscreen', '');
+            embedElement.style.margin = '4px';
+        }
         // Bluesky post
         else if (/bsky\.app\/profile\/[^\/]+\/post\/[\w\d]+/i.test(url)) {
             embedElement = document.createElement('iframe');
@@ -1244,14 +1314,15 @@ function addEmbedToOverlay(urls) {
         if (embedElement) {
             embedElement.style.objectFit = 'contain';
             embedElement.style.display = 'block';
-            embedElement.style.height = 'auto'; // Only as tall as needed for content
-            embedElement.style.maxHeight = '';  // Remove any max height restriction
+            embedElement.style.height = 'auto';
+            embedElement.style.minHeight = '100px';
+            embedElement.style.maxHeight = '800px';
+            // Store the normalized URL for robust deduplication
+            embedElement.dataset.normalizedUrl = url;
             // Insert at the top so newest embeds appear first
-            if (mediaEmbedColumnContainer.firstChild) {
-                mediaEmbedColumnContainer.insertBefore(embedElement, mediaEmbedColumnContainer.firstChild);
-            } else {
-                mediaEmbedColumnContainer.appendChild(embedElement);
-            }
+            let firstChild = mediaEmbedColumnContainer.firstChild;
+            if (firstChild) mediaEmbedColumnContainer.insertBefore(embedElement, firstChild);
+            else mediaEmbedColumnContainer.appendChild(embedElement);
         }
     });
 }
@@ -1604,7 +1675,7 @@ function updatePieChart(sentimentCounts) {
                                 }
                                 return [];
                             }
-                        },
+                                               },
                         onClick: function(e, legendItem, legend) {
                             console.log('Legend item clicked', legendItem);
                             // Double-click detection

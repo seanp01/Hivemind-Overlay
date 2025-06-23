@@ -81,29 +81,39 @@ class LLMService {
 
     // Send a prompt to the local LLM server's /predict endpoint
     async callPredict(chatMessages) {
-        const response = await fetch(this.apiUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ chat_messages: chatMessages })
-        });
+        try {
+            const response = await fetch(this.apiUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ chat_messages: chatMessages })
+            });
 
-        if (!response.ok) {
-            throw new Error('Failed to fetch prediction from LLM API');
+            if (!response.ok) {
+                // Optionally log the error response
+                // const errorText = await response.text();
+                // console.error('LLM API error:', errorText);
+                return [{ sentiment: 'error', score: 0, message: 'Failed to fetch prediction from LLM API' }];
+            }
+
+            const data = await response.json();
+            // Reverse the sentiment_to_label mapping for label lookup
+            const labelToSentiment = Object.entries(sentiment_to_label)
+                .reduce((acc, [sentiment, idx]) => {
+                    acc[`LABEL_${idx}`] = sentiment;
+                    return acc;
+                }, {});
+
+            // Map predictions to readable sentiment labels
+            return (data.prediction || []).map(pred => ({
+                sentiment: labelToSentiment[pred.label] || pred.label,
+                score: pred.score
+            }));
+        } catch (error) {
+            // Handle network or parsing errors gracefully
+            // Optionally log the error
+            // console.error('Fetch failed:', error);
+            return [{ sentiment: 'error', score: 0, message: error.message || 'Unknown error' }];
         }
-
-        const data = await response.json();
-        // Reverse the sentiment_to_label mapping for label lookup
-        const labelToSentiment = Object.entries(sentiment_to_label)
-            .reduce((acc, [sentiment, idx]) => {
-                acc[`LABEL_${idx}`] = sentiment;
-                return acc;
-            }, {});
-
-        // Map predictions to readable sentiment labels
-        return (data.prediction || []).map(pred => ({
-            sentiment: labelToSentiment[pred.label] || pred.label,
-            score: pred.score
-        }));
     }
 }
 
