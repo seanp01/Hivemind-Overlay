@@ -3,7 +3,7 @@
 
 **Hivemind Overlay** is a Chrome extension and optional server-side assistant that enhances Twitch and YouTube livestream chat by:
 
-![image](https://github.com/user-attachments/assets/fe0e6c36-c5af-4682-bd18-e17b59aabbb5)
+![image](https://github.com/user-attachments/assets/667760a8-b1d9-44f4-bfbb-4acca3bb1243)
 
 - Filtering junk
  and spam in real time  
