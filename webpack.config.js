@@ -35,8 +35,9 @@ module.exports = {
   devtool: 'source-map',
   plugins: [
     new webpack.DefinePlugin({
-      'process.env.LMPORT': JSON.stringify(process.env.LMPORT || 5222)
+      'process.env.LMPORT': JSON.stringify(process.env.LMPORT || 5222),
+      'process.env.CLIENT_ID': JSON.stringify(process.env.CLIENT_ID || 'sp9eegloyhmi86feus3jh71delvtfi'),
+      'process.env.TOKENPORT': JSON.stringify(process.env.TOKENPORT || 5223)
     })
   ],
-  
 };

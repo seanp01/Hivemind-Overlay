@@ -1,95 +1,39 @@
-import dotenv from 'dotenv';
-const fs = require('fs');
-const path = require('path');
-const dotenvPath = path.resolve(__dirname, '.env');
-
-dotenv.config();
-
-const ID = process.env.CLIENT_ID || 'your-client-id';
-const TOKEN = process.env.TOKEN || 'your-access-token';
-
-const CLIENT_SECRET = process.env.CLIENT_SECRET || 'your-client-secret';
+const ID = process.env.CLIENT_ID;
+const TOKENPORT = process.env.TOKENPORT;
 
 /**
- * Checks if the current access token is expired by calling Twitch's validate endpoint.
- * If expired, fetches a new token and updates the .env file.
+ * Fetches a new token 
  * @returns {Promise<string>} The valid access token.
  */
-async function ensureValidToken() {
-    const validateUrl = 'https://id.twitch.tv/oauth2/validate';
-    let valid = false;
-
-    try {
-        const res = await fetch(validateUrl, {
-            headers: {
-                'Authorization': `OAuth ${TOKEN}`
-            }
-        });
-        valid = res.ok;
-    } catch (e) {
-        valid = false;
-    }
-
-    if (valid) {
-        return TOKEN;
-    }
-
-    // Token is invalid or expired, fetch a new one
-    const tokenUrl = 'https://id.twitch.tv/oauth2/token';
-    const params = new URLSearchParams({
-        client_id: ID,
-        client_secret: CLIENT_SECRET,
-        grant_type: 'client_credentials'
-    });
-
-    const response = await fetch(tokenUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: params
-    });
-
+async function getToken() {
+    const response = await fetch(`http://localhost:${TOKENPORT}/token`);
     if (!response.ok) {
-        throw new Error(`Failed to refresh Twitch token: ${response.status}`);
+        throw new Error(`Failed to fetch Twitch token: ${response.status}`);
     }
-
     const data = await response.json();
-    const newToken = data.access_token;
-
-    // Save new token to .env
-    await updateEnvVariable('TOKEN', newToken);
-
-    return newToken;
-}
-
-async function updateEnvVariable(key, value) {
-    let envContent = fs.readFileSync(dotenvPath, 'utf8');
-
-    const regex = new RegExp(`^${key}=.*$`, 'm');
-    if (regex.test(envContent)) {
-        // Replace existing key
-        envContent = envContent.replace(regex, `${key}=${value}`);
-    } else {
-        // Append if key not found
-        envContent += `\n${key}=${value}`;
+    if (!data.token) {
+        throw new Error('No token received from token service');
     }
-
-    fs.writeFileSync(dotenvPath, envContent);
-    console.log(`.env updated: ${key}=${value}`);
+    return data.token;
 }
 
+/**
+ * TwitchClient class to interact with Twitch API.
+ */
 class TwitchClient {
     constructor() {
         this.clientId = ID;
-        this.accessToken = TOKEN;
+        this.accessToken = getToken();
         this.baseUrl = 'https://api.twitch.tv/helix';
     }
 
     async getViewerCount(streamerLogin) {
+        const token = await this.accessToken; // Await the Promise here!
         const url = `${this.baseUrl}/streams?user_login=${streamerLogin}`;
         const response = await fetch(url, {
             headers: {
                 'Client-ID': this.clientId,
-                'Authorization': `Bearer ${this.accessToken}`
+                'Authorization': `Bearer ${token}`
             }
         });
 
@@ -108,24 +52,31 @@ class TwitchClient {
 
     /**
      * Periodically fetches viewer count and calls the callback with the value.
-     * @param {string} streamerLogin
+     * @param {string} url
      * @param {function(number):void} callback
      * @param {number} intervalMs
      * @returns {function} stop function
      */
-    startViewerCountPolling(streamerLogin, callback, intervalMs = 60000) {
+    startViewerCountPolling(url, callback, intervalMs = 30000) {
         let stopped = false;
-
+        // Extract channel name from the Twitch chat URL
+        const match = url.match(/twitch\.tv\/(?:popout\/)?([^\/]+)\/chat/);
+        if (!match) {
+            throw new Error('Invalid Twitch chat URL');
+        }
+        const channel = match[1];
+        // Dynamically import tmi.js 
         const poll = async () => {
             if (stopped) return;
             try {
-                const count = await this.getViewerCount(streamerLogin);
-                callback(count);
+                const count = await this.getViewerCount(channel);
+                console.log(`Viewer count for ${channel}: ${count}`);
+                callback(count, Date.now());
             } catch (err) {
-                callback(null, err);
+                callback(null, null, err);
             }
             if (!stopped) {
-                setTimeout(poll, intervalMs);
+                setTimeout(() => { poll(); }, intervalMs);
             }
         };
 

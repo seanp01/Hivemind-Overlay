@@ -18890,6 +18890,106 @@ class SummaryClient {
 
 /***/ }),
 
+/***/ "./src/twitch-client/index.js":
+/*!************************************!*\
+  !*** ./src/twitch-client/index.js ***!
+  \************************************/
+/***/ ((__unused_webpack_module, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   "default": () => (__WEBPACK_DEFAULT_EXPORT__)
+/* harmony export */ });
+const ID = "sp9eegloyhmi86feus3jh71delvtfi";
+const TOKENPORT = 5223;
+
+/**
+ * Fetches a new token 
+ * @returns {Promise<string>} The valid access token.
+ */
+async function getToken() {
+  const response = await fetch(`http://localhost:${TOKENPORT}/token`);
+  if (!response.ok) {
+    throw new Error(`Failed to fetch Twitch token: ${response.status}`);
+  }
+  const data = await response.json();
+  if (!data.token) {
+    throw new Error('No token received from token service');
+  }
+  return data.token;
+}
+
+/**
+ * TwitchClient class to interact with Twitch API.
+ */
+class TwitchClient {
+  constructor() {
+    this.clientId = ID;
+    this.accessToken = getToken();
+    this.baseUrl = 'https://api.twitch.tv/helix';
+  }
+  async getViewerCount(streamerLogin) {
+    const token = await this.accessToken; // Await the Promise here!
+    const url = `${this.baseUrl}/streams?user_login=${streamerLogin}`;
+    const response = await fetch(url, {
+      headers: {
+        'Client-ID': this.clientId,
+        'Authorization': `Bearer ${token}`
+      }
+    });
+    if (!response.ok) {
+      throw new Error(`Twitch API error: ${response.status}`);
+    }
+    const data = await response.json();
+    if (data.data && data.data.length > 0) {
+      return data.data[0].viewer_count;
+    } else {
+      return 0;
+    }
+  }
+
+  /**
+   * Periodically fetches viewer count and calls the callback with the value.
+   * @param {string} url
+   * @param {function(number):void} callback
+   * @param {number} intervalMs
+   * @returns {function} stop function
+   */
+  startViewerCountPolling(url, callback, intervalMs = 30000) {
+    let stopped = false;
+    // Extract channel name from the Twitch chat URL
+    const match = url.match(/twitch\.tv\/(?:popout\/)?([^\/]+)\/chat/);
+    if (!match) {
+      throw new Error('Invalid Twitch chat URL');
+    }
+    const channel = match[1];
+    // Dynamically import tmi.js 
+    const poll = async () => {
+      if (stopped) return;
+      try {
+        const count = await this.getViewerCount(channel);
+        console.log(`Viewer count for ${channel}: ${count}`);
+        callback(count, Date.now());
+      } catch (err) {
+        callback(null, null, err);
+      }
+      if (!stopped) {
+        setTimeout(() => {
+          poll();
+        }, intervalMs);
+      }
+    };
+    poll();
+    return () => {
+      stopped = true;
+    };
+  }
+}
+/* harmony default export */ const __WEBPACK_DEFAULT_EXPORT__ = (TwitchClient);
+
+/***/ }),
+
 /***/ "?6264":
 /*!********************!*\
   !*** ws (ignored) ***!
@@ -19004,7 +19104,9 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export */ });
 /* harmony import */ var chart_js_auto__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! chart.js/auto */ "./node_modules/chart.js/auto/auto.js");
 /* harmony import */ var _src_chat_client_index_js__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! ../src/chat-client/index.js */ "./src/chat-client/index.js");
-/* harmony import */ var _src_summary_client_index_js__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(/*! ../src/summary-client/index.js */ "./src/summary-client/index.js");
+/* harmony import */ var _src_twitch_client_index_js__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(/*! ../src/twitch-client/index.js */ "./src/twitch-client/index.js");
+/* harmony import */ var _src_summary_client_index_js__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(/*! ../src/summary-client/index.js */ "./src/summary-client/index.js");
+
 
 
 
@@ -19559,6 +19661,49 @@ sliderTicksContainer.style.marginTop = '-4px'; // Pull closer to slider
 sliderTicksContainer.style.marginLeft = 'auto';
 sliderTicksContainer.style.marginRight = 'auto';
 
+/**
+ * --- Viewership Line Plot ---
+ * This section creates a new container row for viewership count.
+ * It will be a simple line plot that extends the length of the timeline.
+ */
+
+// Container for the viewership plot
+const viewershipRowContainer = document.createElement('div');
+viewershipRowContainer.style.display = 'flex';
+viewershipRowContainer.style.flexDirection = 'row';
+viewershipRowContainer.style.alignItems = 'center';
+viewershipRowContainer.style.background = 'rgba(30,30,30,0.85)';
+viewershipRowContainer.style.borderRadius = '8px';
+viewershipRowContainer.style.marginTop = '10px';
+viewershipRowContainer.style.marginBottom = '10px';
+viewershipRowContainer.style.marginRight = 'auto';
+viewershipRowContainer.style.marginLeft = 'auto';
+viewershipRowContainer.style.padding = '10px 10px 10px 10px';
+
+// Canvas for the line plot
+let viewershipCanvas = document.createElement('canvas');
+viewershipCanvas.id = 'viewership-lineplot';
+viewershipCanvas.width = 1800;
+viewershipCanvas.height = 100;
+viewershipCanvas.style.width = '88%';
+viewershipCanvas.style.height = '100px';
+viewershipCanvas.style.border = '2px solid red';
+viewershipCanvas.style.padding = '10px 10px 10px 10px';
+viewershipCanvas.style.background = 'rgba(43,43,43,0.89)';
+viewershipCanvas.style.borderRadius = '6px';
+viewershipCanvas.style.display = 'block';
+viewershipCanvas.style.margin = 'auto';
+viewershipRowContainer.appendChild(viewershipCanvas);
+
+// --- Viewership Data Buffer and Plotting ---
+const viewershipBuffer = [];
+const MAX_VIEWERSHIP_POINTS = 200; // Keep last 200 points
+
+// Redraw when time frame changes
+timeFrameRadios.querySelectorAll('input[type=radio]').forEach(radio => {
+  radio.addEventListener('change', drawViewershipLinePlot);
+});
+
 // Create or get the y-axis container and insert it as a sibling to the bar chart container
 let yAxisContainer = document.createElement('div');
 yAxisContainer.id = 'hivemind-bar-yaxis';
@@ -19649,6 +19794,9 @@ sliderBarContainer.appendChild(barChartEmojiRow);
 sliderBarContainer.appendChild(timeSlider);
 sliderBarContainer.appendChild(sliderTicksContainer);
 updateSliderTicks();
+
+// Insert the viewership row above the sliderBarContainer
+overlayContainer.appendChild(viewershipRowContainer);
 
 // Insert the sliderBarContainer into your overlay (e.g., after sentimentSummaryContainer)
 overlayContainer.appendChild(sliderBarContainer);
@@ -19760,6 +19908,7 @@ timeSlider.addEventListener('input', () => {
   updateBarChart(); // Optionally update bar chart to reflect new window
   updateTimelineLabels();
   updateEmbedsForWindow();
+  drawViewershipLinePlot();
 });
 updateTimelineLabels();
 
@@ -19785,6 +19934,7 @@ sentimentSummaryContainer.appendChild(radarIframe);
 //sentimentSummaryContainer.appendChild(movementArrowList);
 
 let chatPaused = false;
+const twitchClient = new _src_twitch_client_index_js__WEBPACK_IMPORTED_MODULE_2__["default"]();
 const chatClient = new _src_chat_client_index_js__WEBPACK_IMPORTED_MODULE_1__["default"]('twitch'); // or 'youtube'
 chatClient.on('message', msg => {
   aggregateSentiment(msg);
@@ -19800,7 +19950,7 @@ chatClient.on('message', msg => {
   if (toggledSentiments && Array.isArray(msg.predictions) && msg.predictions.some(pred => toggledSentiments.has(pred.sentiment))) return;
   addMessageToOverlay(msg);
 });
-const summaryClient = new _src_summary_client_index_js__WEBPACK_IMPORTED_MODULE_2__["default"]();
+const summaryClient = new _src_summary_client_index_js__WEBPACK_IMPORTED_MODULE_3__["default"]();
 
 // Update bar chart when time frame changes
 timeFrameRadios.querySelectorAll('input[type=radio]').forEach(radio => {
@@ -19810,13 +19960,14 @@ timeFrameRadios.querySelectorAll('input[type=radio]').forEach(radio => {
   });
 });
 
-// Listen for messages from the chat client (to be implemented)
+// Listen for messages from the chat client
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.type === "tabUrl") {
     // Use request.url as needed
     console.log("Tab URL received in content script:", request.url);
     // You can now use request.url in your content script logic
     chatClient.connect(request.url);
+    twitchClient.startViewerCountPolling(request.url, addViewershipPoint, 10000); // 10 seconds is the shortest time interval for the UI
   }
   if (request.type === "getOverlayHtml") {
     const overlay = document.getElementById('hivemind-overlay');
@@ -19854,7 +20005,7 @@ function updateEmbedsForWindow() {
       if (urls) {
         urls.forEach(url => {
           const embedUrl = getEmbedUrl(url); // always normalize!
-          if (!urlSet.includes(embedUrl)) urlSet.push(embedUrl);
+          if (isEmbeddableUrl(embedUrl) && !urlSet.includes(embedUrl)) urlSet.push(embedUrl);
         });
       }
     }
@@ -19902,6 +20053,35 @@ function updateEmbedsForWindow() {
       child.remove();
     }
   });
+}
+
+/**
+ * Returns true if the given URL is embeddable (i.e., addEmbedToOverlay will create an element for it)
+ */
+function isEmbeddableUrl(url) {
+  // Image
+  if (/\.(jpg|jpeg|png|gif|webp)$/i.test(url)) return true;
+  // Youtube videos
+  if (/youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/shorts\//i.test(url) || /youtube\.com\/embed\/[A-Za-z0-9_\-]+/i.test(url)) return true;
+  // YouTube channel/profile (not embeddable as video, but as a link)
+  if (/youtube\.com\/(channel|user|c|@)[^\/\s]+/i.test(url)) return true;
+  // Twitch VOD
+  if (/twitch\.tv\/videos\/(\d+)/i.test(url)) return true;
+  // MP4 video
+  if (/\.mp4$/i.test(url)) return true;
+  // TikTok video
+  if (/tiktok\.com\/@[\w.-]+\/video\/\d+/i.test(url)) return true;
+  // TikTok profile
+  if (/tiktok\.com\/@[\w.-]+\/?$/i.test(url)) return true;
+  // Instagram post
+  if (/instagram\.com\/p\/[\w-]+/i.test(url)) return true;
+  // Instagram profile
+  if (/instagram\.com\/([a-zA-Z0-9_.]+)\/?$/i.test(url) && !/\/p\//i.test(url)) return true;
+  // Wikipedia article
+  if (/^https?:\/\/([a-z]+\.)?wikipedia\.org\/wiki\/[^ ]+/i.test(url)) return true;
+  // X/Twitter post
+  if (/^(https?:\/\/)?(x\.com|twitter\.com)\/[^\/]+\/status\/(\d+)/i.test(url)) return true;
+  // ...add more as needed...
 }
 function getEmbedUrl(url) {
   // YouTube video (watch, short, youtu.be, embed)
@@ -20898,6 +21078,148 @@ function bufferMessage(message) {
 function adjustTimeSliderForTimeFrame() {
   // Always keep slider at "now" when time frame changes
   timeSlider.value = 99;
+}
+
+/**
+ * Call this function whenever you receive a new viewership count.
+ * @param {number} count - The current viewership count.
+ * @param {number} [ts] - Optional timestamp (ms). Defaults to now.
+ * @param {Error} [err] - Optional error parameter.
+ */
+function addViewershipPoint(count, ts, err) {
+  if (err) {
+    // Gracefully handle error and move on
+    console.warn('Viewership fetch error:', err);
+    return;
+  }
+  if (typeof count !== 'number' || isNaN(count)) {
+    // Invalid count, skip this point
+    return;
+  }
+  viewershipBuffer.push({
+    count,
+    ts: ts !== undefined ? ts : Date.now()
+  });
+  while (viewershipBuffer.length > MAX_VIEWERSHIP_POINTS) {
+    viewershipBuffer.shift();
+  }
+  drawViewershipLinePlot();
+}
+
+/**
+ * Draws the viewership line plot on the canvas.
+ */
+function drawViewershipLinePlot() {
+  // Use a slightly smaller drawing area to avoid overflow
+  const ctx = viewershipCanvas.getContext('2d');
+  ctx.save();
+  ctx.clearRect(0, 0, viewershipCanvas.width, viewershipCanvas.height);
+
+  // Use only padding, no translate
+  const leftPad = 8,
+    rightPad = 8,
+    topPad = 8,
+    bottomPad = 16;
+  const w = viewershipCanvas.width - leftPad - rightPad;
+  const h = viewershipCanvas.height - topPad - bottomPad;
+  if (viewershipBuffer.length < 1) return;
+
+  // Determine the time window to plot (match selectedTimeFrame)
+  const now = Date.now();
+  const windowStart = now - selectedTimeFrame * 1000;
+  const points = viewershipBuffer.filter(p => p.ts >= windowStart);
+  if (points.length === 1) {
+    // Draw a single point in the center of the plot area
+    const p = points[0];
+    const x = leftPad + w / 2;
+    const y = topPad + h / 2;
+    ctx.fillStyle = '#2196F3';
+    ctx.beginPath();
+    ctx.arc(x, y, 3, 0, 2 * Math.PI);
+    ctx.fill();
+    ctx.font = 'bold 13px Arial';
+    ctx.textAlign = 'left';
+    ctx.fillText(p.count, x + 8, y + 4);
+    ctx.restore();
+    return;
+  }
+
+  // Find min/max for scaling
+  let min = Math.min(...points.map(p => p.count));
+  let max = Math.max(...points.map(p => p.count));
+  if (min === max) {
+    min -= 1;
+    max += 1;
+  }
+
+  // "Nice" min/max scaling: only round up if needed, keep tight bounds
+  function niceNum(x, roundUp = false) {
+    if (x === 0) return 0;
+    const exp = Math.floor(Math.log10(Math.abs(x)));
+    const f = x / Math.pow(10, exp);
+    let nf;
+    if (roundUp) {
+      if (f <= 1) nf = 1;else if (f <= 2) nf = 2;else if (f <= 5) nf = 5;else nf = 10;
+    } else {
+      if (f < 1) nf = 0;else if (f < 2) nf = 1;else if (f < 5) nf = 2;else nf = 5;
+    }
+    return nf * Math.pow(10, exp);
+  }
+
+  // Only round up max if the range is too tight (less than 10% headroom)
+  let range = max - min;
+  let pad = Math.max(1, Math.round(range * 0.1));
+  min = Math.floor(min - pad);
+  max = Math.ceil(max + pad);
+
+  // If the range is still too small, expand further
+  if (max - min < 5) {
+    min = Math.floor(min - 2);
+    max = Math.ceil(max + 2);
+  }
+  if (min < 0) min = 0;
+
+  // Draw line
+  ctx.beginPath();
+  points.forEach((p, i) => {
+    const x = leftPad + (p.ts - windowStart) / (selectedTimeFrame * 1000) * w;
+    const y = topPad + h - (p.count - min) / (max - min) * h;
+    if (i === 0) ctx.moveTo(x, y);else ctx.lineTo(x, y);
+  });
+  ctx.strokeStyle = '#2196F3';
+  ctx.lineWidth = 2;
+  ctx.shadowColor = '#2196F3';
+  ctx.shadowBlur = 2;
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+
+  // Draw min/max labels
+  ctx.fillStyle = '#bbb';
+  ctx.font = '14px Arial';
+  ctx.textAlign = 'right';
+  ctx.fillText(max, leftPad + 40, topPad + 12);
+  ctx.fillText(min, leftPad + 40, topPad + h);
+
+  // Draw latest value at the end
+  const last = points[points.length - 1];
+  let x = leftPad + (last.ts - windowStart) / (selectedTimeFrame * 1000) * w;
+  const y = topPad + h - (last.count - min) / (max - min) * h;
+  ctx.fillStyle = '#2196F3';
+  ctx.beginPath();
+  ctx.arc(x, y, 3, 0, 2 * Math.PI);
+  ctx.fill();
+  ctx.font = 'bold 13px Arial';
+  ctx.textAlign = 'left';
+  // Prevent label overflow on the right edge
+  const labelWidth = ctx.measureText(String(last.count)).width;
+  const labelPadding = 8 + labelWidth + 8; // 8px offset + label + 8px margin
+  if (x + labelPadding > viewershipCanvas.width) {
+    x = viewershipCanvas.width - labelPadding;
+  }
+  // Draw the label above the point
+  ctx.textBaseline = 'bottom';
+  ctx.fillText(last.count, x + 8, y - 8);
+  ctx.restore();
 }
 
 // When you want to summarize the current chat window:
