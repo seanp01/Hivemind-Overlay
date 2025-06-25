@@ -495,7 +495,7 @@ barChartContainer.style.display = 'flex';
 barChartContainer.style.flexDirection = 'row';
 barChartContainer.style.alignItems = 'flex-end';
 barChartContainer.style.height = '60px'; // Height of the bars
-barChartContainer.style.width = '88%';
+barChartContainer.style.width = '89%';
 barChartContainer.style.gap = '1px';
 barChartContainer.style.position = 'relative';
 
@@ -577,7 +577,7 @@ let viewershipCanvas = document.createElement('canvas');
 viewershipCanvas.id = 'viewership-lineplot';
 viewershipCanvas.width = 1800;
 viewershipCanvas.height = 100;
-viewershipCanvas.style.width = '88%';
+viewershipCanvas.style.width = '100%';
 viewershipCanvas.style.height = '100px';
 viewershipCanvas.style.padding = '10px 10px 10px 10px';
 viewershipCanvas.style.background = 'rgba(43,43,43,0.89)';
@@ -1212,7 +1212,8 @@ function addEmbedToOverlay(urls) {
             embedElement.style.gap = '8px';
             // Add a Twitter emoji and username
             const icon = document.createElement('span');
-            icon.textContent = '🐦';
+            // Use X logo from their domain if available, else fallback to emoji
+            icon.innerHTML = '<img src="https://abs.twimg.com/favicons/twitter.2.ico" alt="X" style="width:20px;height:20px;vertical-align:middle;">';
             icon.style.fontSize = '20px';
             icon.style.marginRight = '6px';
             embedElement.appendChild(icon);
@@ -2123,6 +2124,15 @@ function drawViewershipLinePlot() {
     const windowStart = now - selectedTimeFrame * 1000;
     const points = viewershipBuffer.filter(p => p.ts >= windowStart);
 
+    // Compute percent points for each viewership point
+    const percentPoints = points.map(p => {
+        let percent = 0;
+        if (p.count > 0 && windowUniqueChatters && windowUniqueChatters.size > 0) {
+            percent = (windowUniqueChatters.size / p.count) * 100;
+        }
+        return { ts: p.ts, percent, count: p.count };
+    });
+
     if (points.length === 1) {
         // Draw a single point in the center of the plot area
         const p = points[0];
@@ -2134,22 +2144,21 @@ function drawViewershipLinePlot() {
         ctx.fill();
         ctx.font = 'bold 13px Arial';
         ctx.textAlign = 'left';
-        ctx.fillText(p.count, x + 8, y + 4);
+        ctx.fillText(`${p.count} viewers`, x - 16, y + 16);
 
         // Draw unique chatters percentage if possible
         if (p.count > 0 && windowUniqueChatters && windowUniqueChatters.size > 0) {
             const percent = Math.round((windowUniqueChatters.size / p.count) * 100);
             ctx.fillStyle = '#43A047';
             ctx.font = 'bold 12px Arial';
-            // Shift label to the left by 30px to avoid cutoff
-            ctx.fillText(`${percent}% chatting`, x - 8, y + 22);
+            ctx.fillText(`${percent}% chatting`, x - 16, y + 22);
         }
 
         ctx.restore();
         return;
     }
 
-    // Find min/max for scaling
+    // Find min/max for scaling (viewership)
     let min = Math.min(...points.map(p => p.count));
     let max = Math.max(...points.map(p => p.count));
     if (min === max) { min -= 1; max += 1; }
@@ -2187,11 +2196,12 @@ function drawViewershipLinePlot() {
     }
     if (min < 0) min = 0;
 
-    // Draw line
+    // Draw viewership line
     ctx.beginPath();
     points.forEach((p, i) => {
-        const x = leftPad + ((p.ts - windowStart) / (selectedTimeFrame * 1000)) * w;
+        const x = leftPad + ((p.ts - windowStart) / (selectedTimeFrame * 1000)) * w - 100;
         const y = topPad + h - ((p.count - min) / (max - min)) * h;
+        if (x < 100) return; // Skip points that are off the left edge
         if (i === 0) ctx.moveTo(x, y);
         else ctx.lineTo(x, y);
     });
@@ -2202,17 +2212,58 @@ function drawViewershipLinePlot() {
     ctx.stroke();
     ctx.shadowBlur = 0;
 
-    // Draw min/max labels
-    ctx.fillStyle = '#bbb';
+    // Find min/max percent for scaling
+    let percentMin = 0, percentMax = 100;
+    if (percentPoints.length > 0) {
+        percentMin = Math.min(...percentPoints.map(p => p.percent));
+        percentMax = Math.max(...percentPoints.map(p => p.percent));
+        if (percentMin === percentMax) {
+            percentMin = Math.max(0, percentMin - 5);
+            percentMax = Math.min(100, percentMax + 5);
+        }
+        // Clamp to [0,100]
+        percentMin = Math.max(0, Math.floor(percentMin));
+        percentMax = Math.min(100, Math.ceil(percentMax));
+    }
+
+    // Draw percent line
+    ctx.beginPath();
+    percentPoints.forEach((p, i) => {
+        const x = leftPad + ((p.ts - windowStart) / (selectedTimeFrame * 1000)) * w - 100;
+        const y = topPad + h - ((p.percent - percentMin) / (percentMax - percentMin)) * h;
+        if (x < 100) return; // Skip points that are off the left edge
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+    });
+    ctx.strokeStyle = '#43A047';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([4, 2]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Draw min/max labels for viewership
+    ctx.fillStyle = '#2196F3';
     ctx.font = '14px Arial';
     ctx.textAlign = 'right';
-    ctx.fillText(max, leftPad + 40, topPad + 12);
+    ctx.textBaseline = 'top';
+    ctx.fillText(max, leftPad + 40, topPad - 2);
+    ctx.textBaseline = 'bottom';
     ctx.fillText(min, leftPad + 40, topPad + h);
+
+    // Draw min/max labels for percent (right side)
+    ctx.fillStyle = '#43A047';
+    ctx.font = '12px Arial';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+    ctx.fillText(percentMax + '%', viewershipCanvas.width - rightPad - 40, topPad - 2);
+    ctx.textBaseline = 'bottom';
+    ctx.fillText(percentMin + '%', viewershipCanvas.width - rightPad - 40, topPad + h);
 
     // Draw latest value at the end
     const last = points[points.length - 1];
+    const lastPercent = percentPoints[percentPoints.length - 1];
     if (last) {
-        let x = leftPad + ((last.ts - windowStart) / (selectedTimeFrame * 1000)) * w;
+        let x = leftPad + ((last.ts - windowStart) / (selectedTimeFrame * 1000)) * w - 100;
         const y = topPad + h - ((last.count - min) / (max - min)) * h;
         ctx.fillStyle = '#2196F3';
         ctx.beginPath();
@@ -2242,15 +2293,21 @@ function drawViewershipLinePlot() {
             ctx.textBaseline = 'bottom';
             labelY = y - 8;
         }
-        ctx.fillText(last.count, x + 8, labelY);
+        ctx.fillText(`${last.count} viewers`, x - 24, labelY);
 
-        // Draw unique chatters percentage if possible
-        if (last.count > 0 && windowUniqueChatters && windowUniqueChatters.size > 0) {
-            const percent = Math.round((windowUniqueChatters.size / last.count) * 100);
+        // Draw unique chatters percentage if possible (as a dot and label)
+        if (lastPercent && lastPercent.count > 0) {
+            const percentFloat = lastPercent.percent;
+            const percent = Math.round(percentFloat);
+            // Calculate y for percent overlay using the float value for accuracy
+            const yPercent = topPad + h - ((percentFloat - percentMin) / (percentMax - percentMin)) * h;
             ctx.fillStyle = '#43A047';
+            ctx.beginPath();
+            ctx.arc(x, yPercent, 3, 0, 2 * Math.PI);
+            ctx.fill();
             ctx.font = 'bold 12px Arial';
             ctx.textBaseline = 'top';
-            ctx.fillText(`${percent}% chatters`, x - 8, labelY + 16);
+            ctx.fillText(`${percent}% chatting`, x - 24, yPercent + 8);
         }
     }
     ctx.restore();
