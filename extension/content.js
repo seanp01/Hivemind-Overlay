@@ -442,11 +442,10 @@ mediaEmbedColumnContainer.style.display = 'flex';
 mediaEmbedColumnContainer.style.flexDirection = 'column';
 mediaEmbedColumnContainer.style.gap = '8px';
 mediaEmbedColumnContainer.style.flex = '1 1 0';
-mediaEmbedColumnContainer.style.height = leftOverlayColumnContainer.style.height;
+mediaEmbedColumnContainer.style.height = '800px';
 mediaEmbedColumnContainer.style.overflowY = 'scroll';
 mediaEmbedColumnContainer.style.width = '80%';
 mediaEmbedColumnContainer.style.marginTop = '10px';
-mediaEmbedColumnContainer.style.marginBottom = '10px';
 mediaEmbedColumnContainer.style.marginRight = '10px';
 mediaEmbedColumnContainer.style.marginLeft = '20px';
 mediaEmbedColumnContainer.style.paddingLeft = '10px';
@@ -570,11 +569,7 @@ viewershipRowContainer.style.flexDirection = 'row';
 viewershipRowContainer.style.alignItems = 'center';
 viewershipRowContainer.style.background = 'rgba(30,30,30,0.85)';
 viewershipRowContainer.style.borderRadius = '8px';
-viewershipRowContainer.style.marginTop = '10px';
-viewershipRowContainer.style.marginBottom = '10px';
-viewershipRowContainer.style.marginRight = 'auto';
-viewershipRowContainer.style.marginLeft = 'auto';
-
+viewershipRowContainer.style.margin = '10px';
 viewershipRowContainer.style.padding = '10px 10px 10px 10px';
 
 // Canvas for the line plot
@@ -951,9 +946,15 @@ function updateEmbedsForWindow() {
         const url = urlSet[i];
         let embedElement = urlToElement[url];
         if (embedElement) {
-            // Only move if not already at the top
-            if (mediaEmbedColumnContainer.firstChild !== embedElement) {
-                mediaEmbedColumnContainer.insertBefore(embedElement, mediaEmbedColumnContainer.firstChild);
+            // Only move if not already at the correct position
+            const desiredIndex = urlSet.length - 1 - i;
+            const currentIndex = Array.from(mediaEmbedColumnContainer.children).indexOf(embedElement);
+            if (currentIndex !== desiredIndex) {
+                // Find the reference node for insertBefore (null means append at end)
+                const refNode = mediaEmbedColumnContainer.children[desiredIndex] || null;
+                if (embedElement !== refNode) {
+                    mediaEmbedColumnContainer.insertBefore(embedElement, refNode);
+                }
             }
             seen.add(url);
         } else {
@@ -964,12 +965,13 @@ function updateEmbedsForWindow() {
         }
     }
     // Remove any embeds not in the current urlSet (not seen)
-    Array.from(mediaEmbedColumnContainer.children).forEach(child => {
-        const url = child.dataset.normalizedUrl;
-        if (url && !seen.has(url)) {
-            child.remove();
-        }
-    });
+    // Array.from(mediaEmbedColumnContainer.children).forEach(child => {
+    //     const url = child.dataset.normalizedUrl;
+    //     if (url && !seen.has(url)) {
+    //         console.log(`Removing embed for URL from window: ${url}`);
+    //         child.remove();
+    //     }
+    // });
 }
 
 /**
@@ -1398,16 +1400,18 @@ function addEmbedToOverlay(urls) {
             embedElement.style.objectFit = 'contain';
             embedElement.style.display = 'block';
             embedElement.style.height = 'auto';
-            embedElement.style.minHeight = '100px';
+            embedElement.style.minHeight = '50px';
             embedElement.style.maxHeight = '800px';
             // Store the normalized URL for robust deduplication
             embedElement.dataset.normalizedUrl = url;
-            // Insert at the top so newest embeds appear first
             let firstChild = mediaEmbedColumnContainer.firstChild;
             if (firstChild) mediaEmbedColumnContainer.insertBefore(embedElement, firstChild);
             else mediaEmbedColumnContainer.appendChild(embedElement);
         }
     });
+    if (mediaEmbedColumnContainer) {
+        mediaEmbedColumnContainer.scrollTop = mediaEmbedColumnContainer.scrollHeight;
+    }
 }
 
 /**
@@ -1425,7 +1429,7 @@ function scrollOverlayToBottom() {
 function addMessageToOverlay(message) {
     const messageElement = renderMessageElement(message);
     if (!chatPaused) messagesContainer.appendChild(messageElement);
-    scrollOverlayToBottom();
+    if (!chatPaused) scrollOverlayToBottom();
     if (!chatPaused) updateBarChart();
     if (!chatPaused) updatePieChartForWindow();
     if (!chatPaused) updateTimelineLabels();
@@ -2023,18 +2027,44 @@ function aggregateSentiment(message) {
     }
 }
 
+const MAX_CHAT_MESSAGES = 10000; // or a lower value if needed
+let windowUniqueChatters = new Set(); // Track unique chatters in the current window
+
 /**
  * Buffers a chat message for processing.
  * @param {*} message 
  */
 function bufferMessage(message) {
     chatBuffer.push({ ...message, ts: Date.now() });
-    // Remove old messages
+    // Remove old messages by time
     const cutoff = Date.now() - MAX_BUFFER_SECONDS * 1000;
     while (chatBuffer.length && chatBuffer[0].ts < cutoff) {
         chatBuffer.shift();
     }
+    // Remove old messages by count
+    while (chatBuffer.length > MAX_CHAT_MESSAGES) {
+        chatBuffer.shift();
+    }
 }
+
+/**
+ * Updates the unique chatters set for the current window.
+ * Call this after updating windowMessages.
+ */
+function updateWindowUniqueChatters() {
+    windowUniqueChatters = new Set();
+    windowMessages.forEach(msg => {
+        if (msg.user) windowUniqueChatters.add(msg.user);
+    });
+}
+
+// Call updateWindowUniqueChatters() whenever windowMessages is updated
+// For example, in updatePieChartForWindow and timeSlider/input event:
+const origUpdatePieChartForWindow = updatePieChartForWindow;
+updatePieChartForWindow = function() {
+    origUpdatePieChartForWindow.apply(this, arguments);
+    updateWindowUniqueChatters();
+};
 
 /**
  * Adjust the timeSlider so that its range always matches the selectedTimeFrame.
@@ -2072,6 +2102,8 @@ function addViewershipPoint(count, ts, err) {
 
 /**
  * Draws the viewership line plot on the canvas.
+ * Also overlays a second line plot: % of unique chatters among viewers.
+ * The right side of the plot shows min/max for the overlay line.
  */
 function drawViewershipLinePlot() {
     // Use a slightly smaller drawing area to avoid overflow
@@ -2103,6 +2135,16 @@ function drawViewershipLinePlot() {
         ctx.font = 'bold 13px Arial';
         ctx.textAlign = 'left';
         ctx.fillText(p.count, x + 8, y + 4);
+
+        // Draw unique chatters percentage if possible
+        if (p.count > 0 && windowUniqueChatters && windowUniqueChatters.size > 0) {
+            const percent = Math.round((windowUniqueChatters.size / p.count) * 100);
+            ctx.fillStyle = '#43A047';
+            ctx.font = 'bold 12px Arial';
+            // Shift label to the left by 30px to avoid cutoff
+            ctx.fillText(`${percent}% chatting`, x - 8, y + 22);
+        }
+
         ctx.restore();
         return;
     }
@@ -2169,23 +2211,48 @@ function drawViewershipLinePlot() {
 
     // Draw latest value at the end
     const last = points[points.length - 1];
-    let x = leftPad + ((last.ts - windowStart) / (selectedTimeFrame * 1000)) * w;
-    const y = topPad + h - ((last.count - min) / (max - min)) * h;
-    ctx.fillStyle = '#2196F3';
-    ctx.beginPath();
-    ctx.arc(x, y, 3, 0, 2 * Math.PI);
-    ctx.fill();
-    ctx.font = 'bold 13px Arial';
-    ctx.textAlign = 'left';
-    // Prevent label overflow on the right edge
-    const labelWidth = ctx.measureText(String(last.count)).width;
-    const labelPadding = 8 + labelWidth + 8; // 8px offset + label + 8px margin
-    if (x + labelPadding > viewershipCanvas.width) {
-        x = viewershipCanvas.width - labelPadding;
+    if (last) {
+        let x = leftPad + ((last.ts - windowStart) / (selectedTimeFrame * 1000)) * w;
+        const y = topPad + h - ((last.count - min) / (max - min)) * h;
+        ctx.fillStyle = '#2196F3';
+        ctx.beginPath();
+        ctx.arc(x, y, 3, 0, 2 * Math.PI);
+        ctx.fill();
+        ctx.font = 'bold 13px Arial';
+        ctx.textAlign = 'left';
+        // Prevent label overflow on the right edge
+        const labelWidth = ctx.measureText(String(last.count)).width;
+        const labelPadding = 8 + labelWidth + 8; // 8px offset + label + 8px margin
+        if (x + labelPadding > viewershipCanvas.width) {
+            x = viewershipCanvas.width - labelPadding;
+        }
+        // Decide label position: below if near max, above if near min, above by default
+        let labelY;
+        const threshold = Math.max(2, (max - min) * 0.1);
+        if (Math.abs(last.count - max) < threshold) {
+            // Near max, place below
+            ctx.textBaseline = 'top';
+            labelY = y + 8;
+        } else if (Math.abs(last.count - min) < threshold) {
+            // Near min, place above
+            ctx.textBaseline = 'bottom';
+            labelY = y - 8;
+        } else {
+            // Default: above
+            ctx.textBaseline = 'bottom';
+            labelY = y - 8;
+        }
+        ctx.fillText(last.count, x + 8, labelY);
+
+        // Draw unique chatters percentage if possible
+        if (last.count > 0 && windowUniqueChatters && windowUniqueChatters.size > 0) {
+            const percent = Math.round((windowUniqueChatters.size / last.count) * 100);
+            ctx.fillStyle = '#43A047';
+            ctx.font = 'bold 12px Arial';
+            ctx.textBaseline = 'top';
+            ctx.fillText(`${percent}% chatters`, x - 8, labelY + 16);
+        }
     }
-    // Draw the label above the point
-    ctx.textBaseline = 'bottom';
-    ctx.fillText(last.count, x + 8, y - 8);
     ctx.restore();
 }
 
