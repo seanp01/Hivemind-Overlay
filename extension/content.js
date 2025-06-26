@@ -282,7 +282,41 @@ expandButton.style.top = '10px';
 expandButton.style.right = '10px';
 expandButton.style.zIndex = '10002';
 expandButton.style.display = 'none';
+const downloadButton = document.createElement('button');
+downloadButton.textContent = '⬇';
+downloadButton.title = 'Download chat data';
+downloadButton.style.background = '#222';
+downloadButton.style.color = '#fff';
+downloadButton.style.border = 'none';
+downloadButton.style.borderRadius = '50%';
+downloadButton.style.width = '28px';
+downloadButton.style.height = '28px';
+downloadButton.style.fontSize = '16px';
+downloadButton.style.cursor = 'pointer';
+downloadButton.style.boxShadow = '0 1px 4px #0004';
+downloadButton.style.display = 'flex';
+downloadButton.style.alignItems = 'center';
+downloadButton.style.justifyContent = 'center';
+downloadButton.style.textAlign = 'center';
+downloadButton.style.lineHeight = '1';
+downloadButton.style.padding = '0';
 
+downloadButton.addEventListener('click', () => {
+    const data = JSON.stringify(chatBuffer, null, 2);
+    const blob = new Blob([data], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'chat_data.json';
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => {
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    }, 100);
+});
+
+buttonBar.appendChild(downloadButton);
 // Move button creation here so they're not appended directly to overlayContainer
 buttonBar.appendChild(stddevControlContainer);
 buttonBar.appendChild(popoutButton);

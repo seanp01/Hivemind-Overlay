@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "HivemindOverlay",
-  "version": "1.32.0",
+  "version": "1.33.0",
   "description": "A Chrome extension that enhances Twitch and YouTube live chats by filtering junk, highlighting useful content, and analyzing live speech audio.",
   "permissions": [
     "activeTab",
