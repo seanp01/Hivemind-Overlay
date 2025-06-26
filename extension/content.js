@@ -938,28 +938,40 @@ const embedTimestamps = new Map();
  * Updates the embeds shown in the overlay to match the current time window.
  * Only embeds from messages within the selectedTimeFrame are shown.
  * Ensures embeds are in correct order (newest at top, oldest at bottom).
+ * If a URL is repeated, only the latest is shown, with a badge for the repeat count.
  */
 function updateEmbedsForWindow() {
-    // Collect all unique URLs from messages in the current window, in order from newest to oldest
-    const urlSet = [];
-    windowMessages.slice().reverse().forEach(msg => {
+    // Map of normalizedUrl -> { count, msg, idx }
+    // We'll process from newest to oldest so the first time we see a URL is the latest.
+    const urlMap = new Map();
+    windowMessages.slice().reverse().forEach((msg, idx) => {
         if (typeof msg.message === "string") {
             const urlRegex = /(https?:\/\/[^\s]+)/g;
             const urls = msg.message.match(urlRegex);
             if (urls) {
                 urls.forEach(url => {
                     const embedUrl = getEmbedUrl(url); // always normalize!
-                    if (isEmbeddableUrl(embedUrl) && !urlSet.includes(embedUrl)) urlSet.push(embedUrl);
+                    if (isEmbeddableUrl(embedUrl)) {
+                        if (!urlMap.has(embedUrl)) {
+                            urlMap.set(embedUrl, { count: 1, msg, idx });
+                        } else {
+                            urlMap.get(embedUrl).count += 1;
+                        }
+                    }
                 });
             }
         }
     });
 
+    // The order should be newest at top, so sort by idx descending (since we reversed above)
+    const urlEntries = Array.from(urlMap.entries())
+        .sort((a, b) => b[1].idx - a[1].idx);
+
     // Remove embeds not in the window (regardless of order)
     const currentChildren = Array.from(mediaEmbedColumnContainer.children);
     currentChildren.forEach(child => {
         const url = child.dataset.normalizedUrl;
-        if (url && !urlSet.includes(url)) {
+        if (url && !urlMap.has(url)) {
             child.remove();
         }
     });
@@ -971,39 +983,56 @@ function updateEmbedsForWindow() {
         if (url) urlToElement[url] = child;
     });
 
-    // Track which URLs are still present after reordering
-    const seen = new Set();
-    // Insert/move embeds in the correct order (newest at top)
-    for (let i = urlSet.length - 1; i >= 0; i--) {
-        const url = urlSet[i];
+    // Insert/move only the latest occurrence of each URL (newest at top)
+    urlEntries.forEach(([url, info], i) => {
         let embedElement = urlToElement[url];
+        if (!embedElement) {
+            addEmbedToOverlay([url]);
+            embedElement = Array.from(mediaEmbedColumnContainer.children).find(child => child.dataset.normalizedUrl === url);
+        }
         if (embedElement) {
-            // Only move if not already at the correct position
-            const desiredIndex = urlSet.length - 1 - i;
+            // Move to correct position if needed
             const currentIndex = Array.from(mediaEmbedColumnContainer.children).indexOf(embedElement);
-            if (currentIndex !== desiredIndex) {
-                // Find the reference node for insertBefore (null means append at end)
-                const refNode = mediaEmbedColumnContainer.children[desiredIndex] || null;
+            if (currentIndex !== i) {
+                const refNode = mediaEmbedColumnContainer.children[i] || null;
                 if (embedElement !== refNode) {
                     mediaEmbedColumnContainer.insertBefore(embedElement, refNode);
                 }
             }
-            seen.add(url);
-        } else {
-            addEmbedToOverlay([url]);
-            // After adding, get the new element and mark as seen
-            const newChild = Array.from(mediaEmbedColumnContainer.children).find(child => child.dataset.normalizedUrl === url);
-            if (newChild) seen.add(url);
+            // Add or update badge for repeat count
+            let badge = embedElement.querySelector('.embed-repeat-badge');
+            if (info.count > 1) {
+                if (!badge) {
+                    badge = document.createElement('span');
+                    badge.className = 'embed-repeat-badge';
+                    badge.style.position = 'absolute';
+                    badge.style.top = '6px';
+                    badge.style.right = '6px';
+                    badge.style.background = '#2196F3';
+                    badge.style.color = '#fff';
+                    badge.style.fontWeight = 'bold';
+                    badge.style.fontSize = '12px';
+                    badge.style.padding = '2px 7px';
+                    badge.style.borderRadius = '12px';
+                    badge.style.zIndex = '10';
+                    badge.style.boxShadow = '0 1px 4px #0004';
+                    badge.style.pointerEvents = 'none';
+                    // Make sure the parent is positioned
+                    embedElement.style.position = 'relative';
+                    embedElement.appendChild(badge);
+                }
+                badge.textContent = `×${info.count}`;
+                badge.title = `${info.count} people sent this link`;
+            } else if (badge) {
+                badge.remove();
+            }
         }
+    });
+
+    // Remove any extra children beyond the number of unique URLs (so only one per group)
+    while (mediaEmbedColumnContainer.children.length > urlEntries.length) {
+        mediaEmbedColumnContainer.removeChild(mediaEmbedColumnContainer.lastChild);
     }
-    // Remove any embeds not in the current urlSet (not seen)
-    // Array.from(mediaEmbedColumnContainer.children).forEach(child => {
-    //     const url = child.dataset.normalizedUrl;
-    //     if (url && !seen.has(url)) {
-    //         console.log(`Removing embed for URL from window: ${url}`);
-    //         child.remove();
-    //     }
-    // });
 }
 
 /**

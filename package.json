@@ -31,8 +31,9 @@
     "webpack": "^5.99.9",
     "webpack-cli": "^4.10.0"
   },
-  "version": "1.35.0",
+  "version": "1.36.0",
   "changelog": {
+    "1.36.0": "Added tallies for repeat urls in the embeds container column. ~ Sean Parker",
     "1.35.0": "Bug fixes for the new bar chart segments. ~ Sean Parker",
     "1.34.0": "Added color segments for the bar chart buckets and adjusted the viewership plot to be better aligned with the other UI data elements. ~ Sean Parker",
     "1.33.0": "Implemented a button in the button bar for downloading the chat data buffer. ~ Sean Parker",
