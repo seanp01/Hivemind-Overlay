@@ -460,7 +460,97 @@ overlayRowContainer.style.display = 'flex';
 overlayRowContainer.style.flexDirection = 'row';
 overlayRowContainer.style.width = '100%';
 overlayRowContainer.style.alignItems = 'flex-start';
+/**
+ * --- Media Embed Filter Bar ---
+ * This bar floats at the top of the mediaEmbedColumnContainer and allows filtering by embed type.
+ */
 
+// Define embed types and their labels/icons
+const embedTypes = [
+    { key: 'news', label: 'News', emoji: '📰' },
+    { key: 'twitter', label: 'Twitter/X', emoji: '🐦' },
+    { key: 'youtube', label: 'YouTube', emoji: '▶️' },
+    { key: 'twitch', label: 'Twitch', emoji: '🎮' },
+    { key: 'tiktok', label: 'TikTok', emoji: '🎵' },
+    { key: 'instagram', label: 'Instagram', emoji: '📸' },
+    { key: 'reddit', label: 'Reddit', emoji: '👽' },
+    { key: 'wikipedia', label: 'Wiki', emoji: '📚' },
+    { key: 'image', label: 'Image', emoji: '🖼️' },
+    { key: 'video', label: 'Video', emoji: '🎬' },
+    { key: 'other', label: 'Other', emoji: '🔗' }
+];
+
+// Track toggled-off embed types (hidden)
+const toggledEmbedTypes = new Set();
+
+// Helper to classify embed type from URL
+function getEmbedType(url) {
+    if (/\.(jpg|jpeg|png|gif|webp)$/i.test(url)) return 'image';
+    if (/youtube\.com|youtu\.be/i.test(url)) return 'youtube';
+    if (/twitch\.tv/i.test(url)) return 'twitch';
+    if (/tiktok\.com/i.test(url)) return 'tiktok';
+    if (/instagram\.com/i.test(url)) return 'instagram';
+    if (/reddit\.com/i.test(url)) return 'reddit';
+    if (/wikipedia\.org/i.test(url)) return 'wikipedia';
+    if (/twitter\.com|x\.com/i.test(url)) return 'twitter';
+    if (/\.mp4$/i.test(url)) return 'video';
+    if (/nytimes\.com|cnn\.com|bbc\.co\.uk|bbc\.com|washingtonpost\.com|theguardian\.com|reuters\.com|bloomberg\.com|npr\.org|forbes\.com|wsj\.com|apnews\.com|aljazeera\.com|cnbc\.com|foxnews\.com|abcnews\.go\.com|news\.yahoo\.com|usatoday\.com|nbcnews\.com|politico\.com|vox\.com|axios\.com|theverge\.com|techcrunch\.com|wired\.com|engadget\.com|arstechnica\.com|nature\.com|sciencemag\.org|scientificamerican\.com/i.test(url)) return 'news';
+    return 'other';
+}
+
+// Create the filter bar
+const embedFilterBar = document.createElement('div');
+embedFilterBar.style.position = 'sticky';
+embedFilterBar.style.top = '0';
+embedFilterBar.style.left = '0';
+embedFilterBar.style.right = '0';
+embedFilterBar.style.zIndex = '100';
+embedFilterBar.style.background = 'rgba(43,43,43,0.97)';
+embedFilterBar.style.display = 'flex';
+embedFilterBar.style.gap = '8px';
+embedFilterBar.style.alignItems = 'center';
+embedFilterBar.style.padding = '6px 10px 6px 10px';
+embedFilterBar.style.borderBottom = '1px solid #2226';
+embedFilterBar.style.borderTopLeftRadius = '8px';
+embedFilterBar.style.borderTopRightRadius = '8px';
+embedFilterBar.style.boxShadow = '0 2px 8px #0002';
+
+// Add filter toggle buttons
+embedTypes.forEach(type => {
+    const btn = document.createElement('button');
+    btn.textContent = `${type.emoji} ${type.label}`;
+    btn.style.background = '#222';
+    btn.style.color = '#fff';
+    btn.style.border = 'none';
+    btn.style.borderRadius = '6px';
+    btn.style.padding = '4px 10px';
+    btn.style.fontSize = '13px';
+    btn.style.cursor = 'pointer';
+    btn.style.opacity = '1';
+    btn.style.transition = 'background 0.2s, opacity 0.2s';
+    btn.dataset.embedType = type.key;
+    btn.classList.add('embed-filter-btn');
+    btn.addEventListener('click', () => {
+        if (toggledEmbedTypes.has(type.key)) {
+            toggledEmbedTypes.delete(type.key);
+            btn.style.opacity = '1';
+            btn.style.background = '#222';
+        } else {
+            toggledEmbedTypes.add(type.key);
+            btn.style.opacity = '0.5';
+            btn.style.background = '#444';
+        }
+        updateEmbedFilterVisibility();
+    });
+    embedFilterBar.appendChild(btn);
+});
+
+// Patch updateEmbedsForWindow to re-apply filter after updating embeds
+const origUpdateEmbedsForWindow = updateEmbedsForWindow;
+updateEmbedsForWindow = function() {
+    origUpdateEmbedsForWindow.apply(this, arguments);
+    updateEmbedFilterVisibility();
+};
 // Media embed column container
 let mediaEmbedColumnContainer = document.createElement('div');
 // Make embeds stack from top to bottom (newest at top)
@@ -479,8 +569,21 @@ mediaEmbedColumnContainer.style.marginRight = '10px';
 mediaEmbedColumnContainer.style.marginLeft = '20px';
 mediaEmbedColumnContainer.style.paddingLeft = '10px';
 mediaEmbedColumnContainer.style.paddingRight = '10px';
-mediaEmbedColumnContainer.style.paddingTop = '10px';
+mediaEmbedColumnContainer.style.paddingTop = '100px';
 mediaEmbedColumnContainer.style.alignItems = 'stretch';
+
+// Insert filter bar at the top of the media embed column
+mediaEmbedColumnContainer.insertBefore(embedFilterBar, mediaEmbedColumnContainer.firstChild);
+
+// Update embed visibility based on toggledEmbedTypes
+function updateEmbedFilterVisibility() {
+    Array.from(mediaEmbedColumnContainer.children).forEach(child => {
+        if (child === embedFilterBar) return;
+        const url = child.dataset.normalizedUrl || child.src || child.href || '';
+        const type = getEmbedType(url);
+        child.style.display = toggledEmbedTypes.has(type) ? 'none' : '';
+    });
+}
 
 // Add left and right columns to the row container
 overlayRowContainer.appendChild(leftOverlayColumnContainer);
@@ -938,7 +1041,7 @@ const embedTimestamps = new Map();
  * If a URL is repeated, only the latest is shown, with a badge for the repeat count.
  */
 function updateEmbedsForWindow() {
-    // Map of normalizedUrl -> { count, msg, idx }
+    // Map of normalizedUrl -> { count, msg, idx, type }
     // We'll process from newest to oldest so the first time we see a URL is the latest.
     const urlMap = new Map();
     windowMessages.slice().reverse().forEach((msg, idx) => {
@@ -948,9 +1051,10 @@ function updateEmbedsForWindow() {
             if (urls) {
                 urls.forEach(url => {
                     const embedUrl = getEmbedUrl(url); // always normalize!
+                    const type = getEmbedType(embedUrl);
                     if (isEmbeddableUrl(embedUrl)) {
                         if (!urlMap.has(embedUrl)) {
-                            urlMap.set(embedUrl, { count: 1, msg, idx });
+                            urlMap.set(embedUrl, { count: 1, msg, idx, type });
                         } else {
                             urlMap.get(embedUrl).count += 1;
                         }
@@ -961,14 +1065,17 @@ function updateEmbedsForWindow() {
     });
 
     // The order should be newest at top, so sort by idx descending (since we reversed above)
-    const urlEntries = Array.from(urlMap.entries())
+    let urlEntries = Array.from(urlMap.entries())
         .sort((a, b) => b[1].idx - a[1].idx);
 
+    // Filter out toggled embed types
+    urlEntries = urlEntries.filter(([url, info]) => !toggledEmbedTypes.has(info.type));
+
     // Remove embeds not in the window (regardless of order)
-    const currentChildren = Array.from(mediaEmbedColumnContainer.children);
+    const currentChildren = Array.from(mediaEmbedColumnContainer.children).filter(child => child !== embedFilterBar);
     currentChildren.forEach(child => {
         const url = child.dataset.normalizedUrl;
-        if (url && !urlMap.has(url)) {
+        if (url && !urlEntries.some(([u]) => u === url)) {
             child.remove();
         }
     });
@@ -980,7 +1087,7 @@ function updateEmbedsForWindow() {
         if (url) urlToElement[url] = child;
     });
 
-    // Insert/move only the latest occurrence of each URL (newest at top)
+    // Insert/move only the latest occurrence of each URL (newest at top, after embedFilterBar)
     urlEntries.forEach(([url, info], i) => {
         let embedElement = urlToElement[url];
         if (!embedElement) {
@@ -988,10 +1095,12 @@ function updateEmbedsForWindow() {
             embedElement = Array.from(mediaEmbedColumnContainer.children).find(child => child.dataset.normalizedUrl === url);
         }
         if (embedElement) {
-            // Move to correct position if needed
-            const currentIndex = Array.from(mediaEmbedColumnContainer.children).indexOf(embedElement);
-            if (currentIndex !== i) {
-                const refNode = mediaEmbedColumnContainer.children[i] || null;
+            // Move to correct position if needed (after embedFilterBar)
+            const children = Array.from(mediaEmbedColumnContainer.children);
+            const embedIndex = children.indexOf(embedElement);
+            const desiredIndex = i + 1; // +1 because embedFilterBar is always first
+            if (embedIndex !== desiredIndex) {
+                const refNode = mediaEmbedColumnContainer.children[desiredIndex] || null;
                 if (embedElement !== refNode) {
                     mediaEmbedColumnContainer.insertBefore(embedElement, refNode);
                 }
@@ -1026,10 +1135,53 @@ function updateEmbedsForWindow() {
         }
     });
 
-    // Remove any extra children beyond the number of unique URLs (so only one per group)
-    while (mediaEmbedColumnContainer.children.length > urlEntries.length) {
-        mediaEmbedColumnContainer.removeChild(mediaEmbedColumnContainer.lastChild);
+    // Remove any extra children beyond the number of unique URLs (so only one per group), but never remove embedFilterBar
+    while (mediaEmbedColumnContainer.children.length > urlEntries.length + 1) {
+        // Always keep embedFilterBar as the first child
+        if (mediaEmbedColumnContainer.lastChild !== embedFilterBar) {
+            mediaEmbedColumnContainer.removeChild(mediaEmbedColumnContainer.lastChild);
+        } else {
+            // If lastChild is embedFilterBar, remove the one before it
+            if (mediaEmbedColumnContainer.children.length > 1) {
+                mediaEmbedColumnContainer.removeChild(mediaEmbedColumnContainer.children[mediaEmbedColumnContainer.children.length - 2]);
+            } else {
+                break;
+            }
+        }
     }
+
+    // --- Sticky/floating embedFilterBar logic ---
+    // Ensure embedFilterBar is always the first child and styled to float above embeds
+    if (mediaEmbedColumnContainer.firstChild !== embedFilterBar) {
+        mediaEmbedColumnContainer.insertBefore(embedFilterBar, mediaEmbedColumnContainer.firstChild);
+    }
+    embedFilterBar.style.position = 'sticky';
+    // Make embedFilterBar sticky to the window, not just the container
+    embedFilterBar.style.position = 'fixed';
+    embedFilterBar.style.top = (buttonBar.getBoundingClientRect().bottom + 10) + 'px';
+    embedFilterBar.style.left = mediaEmbedColumnContainer.getBoundingClientRect().left + 'px';
+    embedFilterBar.style.maxWidth = (parseInt(mediaEmbedColumnContainer.offsetWidth, 10) - 20) + 'px';
+    embedFilterBar.style.overflowX = 'auto';
+    embedFilterBar.style.zIndex = '10010';
+    embedFilterBar.style.background = 'rgba(43,43,43,0.97)';
+    embedFilterBar.style.boxShadow = '0 2px 8px #0002';
+
+    // Keep the filter bar in sync with window scroll/resize
+    function updateEmbedFilterBarPosition() {
+        const rect = mediaEmbedColumnContainer.getBoundingClientRect();
+        embedFilterBar.style.left = rect.left + 'px';
+        embedFilterBar.style.width = rect.width + 'px';
+        embedFilterBar.style.top = (buttonBar.getBoundingClientRect().bottom + 10) + 'px';
+    }
+    window.addEventListener('scroll', updateEmbedFilterBarPosition, { passive: true });
+    window.addEventListener('resize', updateEmbedFilterBarPosition);
+    updateEmbedFilterBarPosition();
+    embedFilterBar.style.zIndex = '10010';
+    embedFilterBar.style.background = 'rgba(43,43,43,0.97)';
+    embedFilterBar.style.boxShadow = '0 2px 8px #0002';
+
+    // Prevent overlap with buttonBar by adjusting top offset dynamically
+    // (If overlayContainer is scrolled, sticky will keep it visible at the right spot)
 }
 
 /**
