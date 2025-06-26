@@ -1563,8 +1563,26 @@ function updateBarChart() {
     const stddev = Math.sqrt(windowBuckets.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / bucketCount);
     const peakThreshold = mean + (updateBarChart.peakStddev || 2) * stddev;
 
-    // 4. Draw bars, scaling to the window max
+    // --- Sentiment stacking order: compute for the whole window ---
+    // Aggregate all sentiments in the window
+    const windowSentimentCounts = {};
+    bucketMessages.forEach(msgs => {
+        msgs.forEach(msg => {
+            if (Array.isArray(msg.predictions)) {
+                msg.predictions.forEach(pred => {
+                    if (!toggledSentiments.has(pred.sentiment)) {
+                        windowSentimentCounts[pred.sentiment] = (windowSentimentCounts[pred.sentiment] || 0) + 1;
+                    }
+                });
+            }
+        });
+    });
+    // Sort by count descending, most common first
+    const stackingOrder = Object.entries(windowSentimentCounts)
+        .sort((a, b) => b[1] - a[1])
+        .map(([sentiment]) => sentiment);
 
+    // 4. Draw bars, scaling to the window max, but clamp to container height
     yAxisContainer.innerHTML = '';
     yAxisLabelsContainer.innerHTML = '';
     const yTicks = 3;
@@ -1616,8 +1634,9 @@ function updateBarChart() {
     updateBarChart.firstLockShown = false;
     updateBarChart.firstUnlockShown = false;
 
-    // --- Find the true max for proportional bar height ---
-    const trueMax = Math.max(...windowBuckets, 1);
+    // --- Find the true max for proportional bar height, but clamp to windowMax ---
+    // (windowMax is already the max in the visible window)
+    const trueMax = windowMax;
 
     for (let i = 0; i < bucketCount; i++) {
         // --- Bar ---
@@ -1626,15 +1645,14 @@ function updateBarChart() {
         bar.style.display = 'inline-block';
         bar.style.verticalAlign = 'bottom';
         bar.style.margin = '0 0.5px';
-        // Proportional height: scale to trueMax, not just windowMax
-        const barHeightPercent = (windowBuckets[i] / trueMax) * 100;
+        // Clamp bar height to 100% of container
+        const barHeightPercent = Math.min((windowBuckets[i] / trueMax) * 100, 100);
         bar.style.height = `${barHeightPercent}%`;
         bar.style.maxHeight = '100%';
         bar.style.position = 'relative';
         bar.style.background = 'transparent';
         bar.title = `${windowBuckets[i]} Chats`;
-
-        // Sentiment stacking logic
+        // Sentiment stacking logic (use stackingOrder for segment order)
         const sentimentCounts = {};
         let total = 0;
         bucketMessages[i].forEach(msg => {
@@ -1652,25 +1670,26 @@ function updateBarChart() {
         if (total === 0) {
             bar.style.background = windowBuckets[i] > 0 ? '#4FC3F7' : '#263238';
         } else {
-            // Create stacked segments
+            // Create stacked segments in window stacking order (most common on bottom)
             let offset = 0;
-            Object.entries(sentimentCounts)
-                .sort((a, b) => b[1] - a[1]) // largest on bottom
-                .forEach(([sentiment, count]) => {
+            // Use the sum of all sentiment counts for this bucket as the denominator
+            const totalSentiment = Object.values(sentimentCounts).reduce((a, b) => a + b, 0) || 1;
+            stackingOrder.forEach(sentiment => {
+                const count = sentimentCounts[sentiment] || 0;
+                if (count > 0) {
                     const seg = document.createElement('div');
                     seg.style.position = 'absolute';
                     seg.style.left = '0';
                     seg.style.right = '0';
                     seg.style.bottom = `${offset}%`;
-                    seg.style.height = `${(count / windowBuckets[i]) * 100}%`;
+                    seg.style.height = `${(count / totalSentiment) * 100}%`;
                     seg.style.background = sentimentColorPalette[sentiment] || sentimentColorPalette.default;
-                    seg.title = `${sentiment}: ${count}`;
                     seg.style.borderTop = '1px solid #2222';
                     seg.style.borderRadius = '2px';
-                    // Remove hover effect from segment
                     bar.appendChild(seg);
-                    offset += (count / windowBuckets[i]) * 100;
-                });
+                    offset += (count / totalSentiment) * 100;
+                }
+            });
         }
 
         // Apply hover effect to the entire bar stack only
@@ -2262,7 +2281,7 @@ function drawViewershipLinePlot() {
         // Use both left and right padding of 100px
         const x = leftPad + ((p.ts - windowStart) / (selectedTimeFrame * 1000)) * (w - 100);
         const y = topPad + h - ((p.count - min) / (max - min)) * h;
-        if (x < leftPad + 100) return; // Skip points that are off the left edge
+        if (x < leftPad) return; // Skip points that are off the left edge
         if (i === 0) ctx.moveTo(x, y);
         else ctx.lineTo(x, y);
     });
@@ -2290,9 +2309,9 @@ function drawViewershipLinePlot() {
             percentMin = Math.max(0, mid - 2.5);
             percentMax = Math.min(100, mid + 2.5);
         }
-        // Limit to one decimal place
-        percentMin = Math.floor(percentMin * 10) / 10;
-        percentMax = Math.ceil(percentMax * 10) / 10;
+        // Limit to two decimal places
+        percentMin = Math.floor(percentMin * 100) / 100;
+        percentMax = Math.ceil(percentMax * 100) / 100;
     }
 
     ctx.beginPath();
@@ -2301,7 +2320,7 @@ function drawViewershipLinePlot() {
         // Clamp percent to min/max for safety
         const percent = Math.max(percentMin, Math.min(percentMax, p.percent));
         const y = topPad + h - ((percent - percentMin) / (percentMax - percentMin)) * h;
-        if (x < leftPad + 100) return; // Skip points that are off the left edge
+        if (x < leftPad) return; // Skip points that are off the left edge
         if (i === 0) ctx.moveTo(x, y);
         else ctx.lineTo(x, y);
     });
