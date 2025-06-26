@@ -359,12 +359,11 @@ const sentimentSummaryContainer = document.createElement('div');
 sentimentSummaryContainer.id = 'sentiment-summary';
 sentimentSummaryContainer.style.background = 'rgba(30,30,30,0.85)';
 sentimentSummaryContainer.style.width = '100%';
-sentimentSummaryContainer.style.marginTop = '10px';
+sentimentSummaryContainer.style.height = '100%';
 sentimentSummaryContainer.style.borderRadius = '8px';
 sentimentSummaryContainer.style.display = 'flex';
 sentimentSummaryContainer.style.flexDirection = 'row';
 sentimentSummaryContainer.style.alignItems = 'left';
-sentimentSummaryContainer.style.gap = '24px';
 
 // Create a flex row container to hold sentiment summary and radar side by side
 const summaryRadarRow = document.createElement('div');
@@ -372,9 +371,9 @@ summaryRadarRow.style.display = 'flex';
 summaryRadarRow.style.flexDirection = 'row';
 summaryRadarRow.style.alignItems = 'center';
 summaryRadarRow.style.width = '100%';
+summaryRadarRow.style.minHeight = '300px';
 summaryRadarRow.style.overflowX = 'auto'; // Allow horizontal scrolling if needed
 summaryRadarRow.style.marginLeft = '10px';
-summaryRadarRow.style.paddingTop = '10px';
 
 // Move sentimentSummaryContainer into the row
 summaryRadarRow.appendChild(sentimentSummaryContainer);
@@ -466,15 +465,13 @@ overlayRowContainer.style.alignItems = 'flex-start';
 let mediaEmbedColumnContainer = document.createElement('div');
 // Make embeds stack from top to bottom (newest at top)
 mediaEmbedColumnContainer.style.display = 'flex';
-mediaEmbedColumnContainer.style.flexDirection = 'column';
 mediaEmbedColumnContainer.style.background = 'rgba(30,30,30,0.85)';
 mediaEmbedColumnContainer.style.borderRadius = '8px';
 mediaEmbedColumnContainer.id = 'hivemind-media-embeds';
-mediaEmbedColumnContainer.style.display = 'flex';
 mediaEmbedColumnContainer.style.flexDirection = 'column';
 mediaEmbedColumnContainer.style.gap = '8px';
 mediaEmbedColumnContainer.style.flex = '1 1 0';
-mediaEmbedColumnContainer.style.height = '800px';
+mediaEmbedColumnContainer.style.height = '790px';
 mediaEmbedColumnContainer.style.overflowY = 'scroll';
 mediaEmbedColumnContainer.style.width = '80%';
 mediaEmbedColumnContainer.style.marginTop = '10px';
@@ -482,6 +479,7 @@ mediaEmbedColumnContainer.style.marginRight = '10px';
 mediaEmbedColumnContainer.style.marginLeft = '20px';
 mediaEmbedColumnContainer.style.paddingLeft = '10px';
 mediaEmbedColumnContainer.style.paddingRight = '10px';
+mediaEmbedColumnContainer.style.paddingTop = '10px';
 mediaEmbedColumnContainer.style.alignItems = 'stretch';
 
 // Add left and right columns to the row container
@@ -851,7 +849,7 @@ const pieCanvas = document.createElement('canvas');
 pieCanvas.id = 'sentiment-pie';
 // Remove fixed width/height styles that may interfere with centering
 pieCanvas.style.display = 'block';
-pieCanvas.style.margin = '0 auto';
+pieCanvas.style.padding = '10px';
 pieCanvas.style.width = '1200px';
 pieCanvas.style.height = '300px';
 
@@ -861,7 +859,6 @@ pieWrapper.style.height = '320px';
 pieWrapper.style.display = 'flex';
 pieWrapper.style.justifyContent = 'left';
 pieWrapper.style.alignItems = 'center';
-pieWrapper.style.overflow = 'hidden';
 pieWrapper.appendChild(pieCanvas);
 sentimentSummaryContainer.style.alignItems = 'center'; // helps vertically align
 sentimentSummaryContainer.appendChild(pieWrapper);
@@ -1845,11 +1842,11 @@ function updatePieChart(sentimentCounts) {
             },
             options: {
                 responsive: false,
-                maintainAspectRatio: false,
+                maintainAspectRatio: true,
                 plugins: {
                     legend: {
                         display: true,
-                        position: 'left',
+                        position: 'right',
                         labels: {
                             generateLabels: function(chart) {
                                 const data = chart.data;
