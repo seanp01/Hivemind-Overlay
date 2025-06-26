@@ -19394,7 +19394,41 @@ expandButton.style.top = '10px';
 expandButton.style.right = '10px';
 expandButton.style.zIndex = '10002';
 expandButton.style.display = 'none';
-
+const downloadButton = document.createElement('button');
+downloadButton.textContent = '⬇';
+downloadButton.title = 'Download chat data';
+downloadButton.style.background = '#222';
+downloadButton.style.color = '#fff';
+downloadButton.style.border = 'none';
+downloadButton.style.borderRadius = '50%';
+downloadButton.style.width = '28px';
+downloadButton.style.height = '28px';
+downloadButton.style.fontSize = '16px';
+downloadButton.style.cursor = 'pointer';
+downloadButton.style.boxShadow = '0 1px 4px #0004';
+downloadButton.style.display = 'flex';
+downloadButton.style.alignItems = 'center';
+downloadButton.style.justifyContent = 'center';
+downloadButton.style.textAlign = 'center';
+downloadButton.style.lineHeight = '1';
+downloadButton.style.padding = '0';
+downloadButton.addEventListener('click', () => {
+  const data = JSON.stringify(chatBuffer, null, 2);
+  const blob = new Blob([data], {
+    type: 'application/json'
+  });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'chat_data.json';
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => {
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }, 100);
+});
+buttonBar.appendChild(downloadButton);
 // Move button creation here so they're not appended directly to overlayContainer
 buttonBar.appendChild(stddevControlContainer);
 buttonBar.appendChild(popoutButton);
@@ -20509,18 +20543,8 @@ function addMessageToOverlay(message) {
  * Aggregate sentiment predictions from a message and update the sentiment summary.
  */
 function renderMessageElement(message) {
-  // Alternate user colors
-
-  const userColors = ['#4FC3F7', '#FFB74D', '#81C784', '#BA68C8', '#FFD54F', '#E57373', '#64B5F6', '#A1887F', '#90A4AE', '#F06292', '#AED581', '#FFF176', '#9575CD', '#4DB6AC', '#FF8A65', '#DCE775', '#7986CB', '#B0BEC5', '#F44336', '#00BCD4'];
-  if (!renderMessageElement.userColorMap) renderMessageElement.userColorMap = {};
-  let userColor = userColors[0];
-  if (message.user) {
-    if (!renderMessageElement.userColorMap[message.user]) {
-      const idx = Object.keys(renderMessageElement.userColorMap).length % userColors.length;
-      renderMessageElement.userColorMap[message.user] = userColors[idx];
-    }
-    userColor = renderMessageElement.userColorMap[message.user];
-  }
+  // Use the color provided in the message object, or fallback to a default
+  let userColor = message.tags.color || '#4FC3F7';
 
   // User styling
   const userSpan = document.createElement('span');
@@ -20655,36 +20679,79 @@ function updateBarChart() {
   // Reset static variables for lock/unlock emoji
   updateBarChart.firstLockShown = false;
   updateBarChart.firstUnlockShown = false;
+
+  // --- Find the true max for proportional bar height ---
+  const trueMax = Math.max(...windowBuckets, 1);
   for (let i = 0; i < bucketCount; i++) {
     // --- Bar ---
     const bar = document.createElement('div');
     bar.style.width = `${100 / bucketCount}%`;
-    bar.style.background = windowBuckets[i] > 0 ? '#4FC3F7' : '#263238';
     bar.style.display = 'inline-block';
     bar.style.verticalAlign = 'bottom';
     bar.style.margin = '0 0.5px';
-    // Calculate bar height relative to the top tick (not windowMax)
-    const barTop = tickInterval * (yTicks - 1);
-    bar.style.height = `${windowBuckets[i] / barTop * 100}%`;
-    bar.style.transition = 'background 0.15s';
+    // Proportional height: scale to trueMax, not just windowMax
+    const barHeightPercent = windowBuckets[i] / trueMax * 100;
+    bar.style.height = `${barHeightPercent}%`;
+    bar.style.maxHeight = '100%';
+    bar.style.position = 'relative';
+    bar.style.background = 'transparent';
     bar.title = `${windowBuckets[i]} Chats`;
+
+    // Sentiment stacking logic
+    const sentimentCounts = {};
+    let total = 0;
+    bucketMessages[i].forEach(msg => {
+      if (Array.isArray(msg.predictions)) {
+        msg.predictions.forEach(pred => {
+          if (!toggledSentiments.has(pred.sentiment)) {
+            sentimentCounts[pred.sentiment] = (sentimentCounts[pred.sentiment] || 0) + 1;
+            total++;
+          }
+        });
+      }
+    });
+
+    // If no sentiment data, fallback to default color
+    if (total === 0) {
+      bar.style.background = windowBuckets[i] > 0 ? '#4FC3F7' : '#263238';
+    } else {
+      // Create stacked segments
+      let offset = 0;
+      Object.entries(sentimentCounts).sort((a, b) => b[1] - a[1]) // largest on bottom
+      .forEach(([sentiment, count]) => {
+        const seg = document.createElement('div');
+        seg.style.position = 'absolute';
+        seg.style.left = '0';
+        seg.style.right = '0';
+        seg.style.bottom = `${offset}%`;
+        seg.style.height = `${count / windowBuckets[i] * 100}%`;
+        seg.style.background = sentimentColorPalette[sentiment] || sentimentColorPalette.default;
+        seg.title = `${sentiment}: ${count}`;
+        seg.style.borderTop = '1px solid #2222';
+        seg.style.borderRadius = '2px';
+        // Remove hover effect from segment
+        bar.appendChild(seg);
+        offset += count / windowBuckets[i] * 100;
+      });
+    }
+
+    // Apply hover effect to the entire bar stack only
+    bar.addEventListener('mouseenter', () => {
+      bar.style.boxShadow = '0 0 8px #039BE5';
+    });
+    bar.addEventListener('mouseleave', () => {
+      bar.style.boxShadow = '';
+    });
+    barChartContainer.appendChild(bar);
+
+    // --- Emoji Row ---
     const emojiSpan = document.createElement('span');
     emojiSpan.style.display = 'inline-block';
     emojiSpan.style.width = `${100 / bucketCount}%`;
     emojiSpan.style.textAlign = 'center';
     emojiSpan.style.fontSize = '14px';
     emojiSpan.style.userSelect = 'none';
-    bar.addEventListener('mouseenter', () => {
-      if (windowBuckets[i] > 0) {
-        bar.style.background = '#039BE5';
-      }
-    });
-    bar.addEventListener('mouseleave', () => {
-      bar.style.background = windowBuckets[i] > 0 ? '#4FC3F7' : '#263238';
-    });
-    barChartContainer.appendChild(bar);
 
-    // --- Emoji Row ---
     // Sub Only Mode Toggle Emoji (show only the first lock and first unlock)
     if (bucketMessages[i].length > 0) {
       // Find first message where subOnlyMode === true (lock) and first where === false (unlock)
@@ -20692,7 +20759,6 @@ function updateBarChart() {
       const firstUnlockMsg = bucketMessages[i].find(msg => msg.subOnlyMode === false);
 
       // Only show the first lock or unlock in the entire chart (not per bucket)
-      // We'll use static variables to track if we've already shown them
       if (!updateBarChart.firstLockShown && firstLockMsg) {
         emojiSpan.textContent = '🔒';
         emojiSpan.title = 'Sub Only Mode Enabled';
@@ -20706,19 +20772,15 @@ function updateBarChart() {
     if (windowBuckets[i] > peakThreshold && bucketMessages[i].length > 0) {
       // Ranked choice aggregation using scores
       const sentimentScores = {};
-      const sentimentCounts = {};
       // For each message, treat predictions as ranked choices (ranked by score)
       bucketMessages[i].forEach(msg => {
         if (Array.isArray(msg.predictions)) {
-          // Sort predictions by score descending (just in case)
           const preds = [...msg.predictions].sort((a, b) => b.score - a.score);
-          // Assign points: 1st = 3, 2nd = 2, 3rd = 1 (Borda count style)
           preds.forEach((pred, idx) => {
             const sentiment = pred.sentiment;
             const points = 3 - idx; // 3, 2, 1
             if (points > 0) {
               sentimentScores[sentiment] = (sentimentScores[sentiment] || 0) + points * pred.score;
-              sentimentCounts[sentiment] = (sentimentCounts[sentiment] || 0) + 1;
             }
           });
         }
@@ -21161,11 +21223,13 @@ function drawViewershipLinePlot() {
   const points = viewershipBuffer.filter(p => p.ts >= windowStart);
 
   // Compute percent points for each viewership point
+  const CHATTER_WINDOW_MS = 60 * 1000; // 60s window for unique chatters per point
   const percentPoints = points.map(p => {
-    let percent = 0;
-    if (p.count > 0 && windowUniqueChatters && windowUniqueChatters.size > 0) {
-      percent = windowUniqueChatters.size / p.count * 100;
-    }
+    const chatStart = p.ts - CHATTER_WINDOW_MS;
+    const chatEnd = p.ts;
+    const chatters = new Set(chatBuffer.filter(msg => msg.ts >= chatStart && msg.ts <= chatEnd && msg.user).map(msg => msg.user));
+    const uniqueChatters = chatters.size;
+    const percent = p.count > 0 ? uniqueChatters / p.count * 100 : 0;
     return {
       ts: p.ts,
       percent,
@@ -21234,9 +21298,10 @@ function drawViewershipLinePlot() {
   // Draw viewership line
   ctx.beginPath();
   points.forEach((p, i) => {
-    const x = leftPad + (p.ts - windowStart) / (selectedTimeFrame * 1000) * w - 100;
+    // Use both left and right padding of 100px
+    const x = leftPad + (p.ts - windowStart) / (selectedTimeFrame * 1000) * (w - 100);
     const y = topPad + h - (p.count - min) / (max - min) * h;
-    if (x < 100) return; // Skip points that are off the left edge
+    if (x < leftPad + 100) return; // Skip points that are off the left edge
     if (i === 0) ctx.moveTo(x, y);else ctx.lineTo(x, y);
   });
   ctx.strokeStyle = '#2196F3';
@@ -21270,11 +21335,11 @@ function drawViewershipLinePlot() {
   }
   ctx.beginPath();
   percentPoints.forEach((p, i) => {
-    const x = leftPad + (p.ts - windowStart) / (selectedTimeFrame * 1000) * w - 100;
+    const x = leftPad + (p.ts - windowStart) / (selectedTimeFrame * 1000) * (w - 100);
     // Clamp percent to min/max for safety
     const percent = Math.max(percentMin, Math.min(percentMax, p.percent));
     const y = topPad + h - (percent - percentMin) / (percentMax - percentMin) * h;
-    if (x < 100) return; // Skip points that are off the left edge
+    if (x < leftPad + 100) return; // Skip points that are off the left edge
     if (i === 0) ctx.moveTo(x, y);else ctx.lineTo(x, y);
   });
   ctx.strokeStyle = '#43A047';
@@ -21313,43 +21378,91 @@ function drawViewershipLinePlot() {
     ctx.fill();
     ctx.font = 'bold 13px Arial';
     ctx.textAlign = 'left';
+
+    // Calculate label widths
+    const viewerLabel = `${last.count} viewers`;
+    const percentLabel = lastPercent && lastPercent.count > 0 ? `${Math.round(lastPercent.percent)}% chatting` : '';
+    const viewerLabelWidth = ctx.measureText(viewerLabel).width;
+    const percentLabelWidth = ctx.measureText(percentLabel).width;
+    const maxLabelWidth = Math.max(viewerLabelWidth, percentLabelWidth);
+
     // Prevent label overflow on the right edge
-    const labelWidth = ctx.measureText(String(last.count)).width;
-    const labelPadding = 8 + labelWidth + 8; // 8px offset + label + 8px margin
+    const labelPadding = 8 + maxLabelWidth + 8;
     if (x + labelPadding > viewershipCanvas.width) {
       x = viewershipCanvas.width - labelPadding;
     }
-    // Decide label position: below if near max, above if near min, above by default
-    let labelY;
-    const threshold = Math.max(2, (max - min) * 0.1);
-    if (Math.abs(last.count - max) < threshold) {
-      // Near max, place below
-      ctx.textBaseline = 'top';
-      labelY = y + 8;
-    } else if (Math.abs(last.count - min) < threshold) {
-      // Near min, place above
-      ctx.textBaseline = 'bottom';
-      labelY = y - 8;
-    } else {
-      // Default: above
-      ctx.textBaseline = 'bottom';
-      labelY = y - 8;
-    }
-    ctx.fillText(`${last.count} viewers`, x - 24, labelY);
 
-    // Draw unique chatters percentage if possible (as a dot and label)
+    // Decide label positions to avoid overlap
+    let viewerLabelY, percentLabelY;
+    let yPercent = y;
     if (lastPercent && lastPercent.count > 0) {
       const percentFloat = lastPercent.percent;
-      const percent = Math.round(percentFloat);
-      // Calculate y for percent overlay using the float value for accuracy
-      const yPercent = topPad + h - (percentFloat - percentMin) / (percentMax - percentMin) * h;
+      yPercent = topPad + h - (percentFloat - percentMin) / (percentMax - percentMin) * h;
+    }
+
+    // If the two points are close, stack labels to avoid overlap
+    const minLabelGap = 18; // px
+    if (lastPercent && lastPercent.count > 0 && Math.abs(y - yPercent) < minLabelGap) {
+      // Stack: viewers above, percent below
+      viewerLabelY = y - 10;
+      percentLabelY = y + 10;
+      ctx.textBaseline = 'bottom';
+      ctx.fillStyle = '#2196F3';
+      ctx.fillText(viewerLabel, x - 24, viewerLabelY);
       ctx.fillStyle = '#43A047';
+      ctx.textBaseline = 'top';
+      ctx.fillText(percentLabel, x - 24, percentLabelY);
+      // Draw percent dot
       ctx.beginPath();
       ctx.arc(x, yPercent, 3, 0, 2 * Math.PI);
       ctx.fill();
-      ctx.font = 'bold 12px Arial';
-      ctx.textBaseline = 'top';
-      ctx.fillText(`${percent}% chatting`, x - 24, yPercent + 8);
+    } else {
+      // Place each label near its point, above unless near min, below if near max
+      // Viewers label
+      let viewerLabelBaseline, viewerLabelOffset;
+      const threshold = Math.max(2, (max - min) * 0.1);
+      if (Math.abs(last.count - max) < threshold) {
+        viewerLabelBaseline = 'top';
+        viewerLabelOffset = y + 8;
+      } else if (Math.abs(last.count - min) < threshold) {
+        viewerLabelBaseline = 'bottom';
+        viewerLabelOffset = y - 8;
+      } else {
+        viewerLabelBaseline = 'bottom';
+        viewerLabelOffset = y - 8;
+      }
+      ctx.textBaseline = viewerLabelBaseline;
+      ctx.fillStyle = '#2196F3';
+      ctx.fillText(viewerLabel, x - 24, viewerLabelOffset);
+
+      // Percent label
+      if (lastPercent && lastPercent.count > 0) {
+        ctx.fillStyle = '#43A047';
+        // Draw percent dot
+        ctx.beginPath();
+        ctx.arc(x, yPercent, 3, 0, 2 * Math.PI);
+        ctx.fill();
+        // Place label above or below depending on space
+        let percentLabelBaseline, percentLabelOffset;
+        if (Math.abs(lastPercent.percent - percentMax) < 5) {
+          percentLabelBaseline = 'top';
+          percentLabelOffset = yPercent + 8;
+        } else if (Math.abs(lastPercent.percent - percentMin) < 5) {
+          percentLabelBaseline = 'bottom';
+          percentLabelOffset = yPercent - 8;
+        } else {
+          // If far from edges, prefer above unless would overlap with viewers label
+          if (Math.abs(yPercent - y) < minLabelGap) {
+            percentLabelBaseline = yPercent > y ? 'top' : 'bottom';
+            percentLabelOffset = yPercent > y ? yPercent + 8 : yPercent - 8;
+          } else {
+            percentLabelBaseline = 'bottom';
+            percentLabelOffset = yPercent - 8;
+          }
+        }
+        ctx.textBaseline = percentLabelBaseline;
+        ctx.fillText(percentLabel, x - 24, percentLabelOffset);
+      }
     }
   }
   ctx.restore();
