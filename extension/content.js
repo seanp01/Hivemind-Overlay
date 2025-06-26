@@ -344,36 +344,34 @@ summaryRadarRow.style.paddingTop = '10px';
 
 // Move sentimentSummaryContainer into the row
 summaryRadarRow.appendChild(sentimentSummaryContainer);
-// Create a container for the radar
-const radarContainer = document.createElement('div');
-radarContainer.style.background = 'rgba(30,30,30,0.85)';
-radarContainer.style.padding = '10px';
-radarContainer.style.margin = '10px';
-radarContainer.style.borderRadius = '8px';
-radarContainer.style.display = 'flex';
-radarContainer.style.flexDirection = 'row';
-radarContainer.style.alignItems = 'center';
-radarContainer.style.gap = '24px';
-radarContainer.style.justifyContent = 'center';
-radarContainer.style.height = '100%';
+// // Create a container for the radar
+// const radarContainer = document.createElement('div');
+// radarContainer.style.background = 'rgba(30,30,30,0.85)';
+// radarContainer.style.padding = '10px';
+// radarContainer.style.margin = '10px';
+// radarContainer.style.borderRadius = '8px';
+// radarContainer.style.display = 'flex';
+// radarContainer.style.flexDirection = 'row';
+// radarContainer.style.alignItems = 'center';
+// radarContainer.style.gap = '24px';
+// radarContainer.style.justifyContent = 'center';
+// radarContainer.style.height = '100%';
 
-//summaryRadarRow.appendChild(radarContainer);
+// const radarIframe = document.createElement('iframe');
+// radarIframe.src = chrome.runtime.getURL('emotion-radar.html');
+// radarIframe.style.width = '20%';
+// radarIframe.style.height = '300px';
+// radarIframe.style.right = 0;
+// radarIframe.style.margin = '10px';
+// radarIframe.style.border = 'none';
+// radarIframe.style.background = 'transparent';
+// radarIframe.style.overflow = 'hidden';
+// radarIframe.scrolling = 'no';
+// radarIframe.setAttribute('scrolling', 'no');
+// radarIframe.allowTransparency = 'true';
 
-const radarIframe = document.createElement('iframe');
-radarIframe.src = chrome.runtime.getURL('emotion-radar.html');
-radarIframe.style.width = '20%';
-radarIframe.style.height = '300px';
-radarIframe.style.right = 0;
-radarIframe.style.margin = '10px';
-radarIframe.style.border = 'none';
-radarIframe.style.background = 'transparent';
-radarIframe.style.overflow = 'hidden';
-radarIframe.scrolling = 'no';
-radarIframe.setAttribute('scrolling', 'no');
-radarIframe.allowTransparency = 'true';
-
-// Move radarIframe into the radarContainer
-radarContainer.appendChild(radarIframe);
+// // Move radarIframe into the radarContainer
+// radarContainer.appendChild(radarIframe);
 
 // Ranking list
 const movementArrowList = document.createElement('ol');
@@ -834,7 +832,7 @@ pieWrapper.appendChild(pieCanvas);
 sentimentSummaryContainer.style.alignItems = 'center'; // helps vertically align
 sentimentSummaryContainer.appendChild(pieWrapper);
 
-sentimentSummaryContainer.appendChild(radarIframe);
+//sentimentSummaryContainer.appendChild(radarIframe);
 //sentimentSummaryContainer.appendChild(movementArrowList);
 
 let chatPaused = false;
@@ -2212,25 +2210,34 @@ function drawViewershipLinePlot() {
     ctx.stroke();
     ctx.shadowBlur = 0;
 
-    // Find min/max percent for scaling
+    // Draw percent line
+    // Calculate min/max percent for scaling, but ensure at least a small range (e.g., 0.5%) for visibility
     let percentMin = 0, percentMax = 100;
     if (percentPoints.length > 0) {
         percentMin = Math.min(...percentPoints.map(p => p.percent));
         percentMax = Math.max(...percentPoints.map(p => p.percent));
+        // If min and max are the same, expand the range a bit for visibility
         if (percentMin === percentMax) {
-            percentMin = Math.max(0, percentMin - 5);
-            percentMax = Math.min(100, percentMax + 5);
+            percentMin = Math.max(0, percentMin - 1);
+            percentMax = Math.min(100, percentMax + 1);
         }
-        // Clamp to [0,100]
-        percentMin = Math.max(0, Math.floor(percentMin));
-        percentMax = Math.min(100, Math.ceil(percentMax));
+        // If the range is too small, expand it to at least 5% or 10% for clarity
+        if (percentMax - percentMin < 5) {
+            const mid = (percentMax + percentMin) / 2;
+            percentMin = Math.max(0, mid - 2.5);
+            percentMax = Math.min(100, mid + 2.5);
+        }
+        // Limit to one decimal place
+        percentMin = Math.floor(percentMin * 10) / 10;
+        percentMax = Math.ceil(percentMax * 10) / 10;
     }
 
-    // Draw percent line
     ctx.beginPath();
     percentPoints.forEach((p, i) => {
         const x = leftPad + ((p.ts - windowStart) / (selectedTimeFrame * 1000)) * w - 100;
-        const y = topPad + h - ((p.percent - percentMin) / (percentMax - percentMin)) * h;
+        // Clamp percent to min/max for safety
+        const percent = Math.max(percentMin, Math.min(percentMax, p.percent));
+        const y = topPad + h - ((percent - percentMin) / (percentMax - percentMin)) * h;
         if (x < 100) return; // Skip points that are off the left edge
         if (i === 0) ctx.moveTo(x, y);
         else ctx.lineTo(x, y);

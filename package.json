@@ -31,8 +31,9 @@
     "webpack": "^5.99.9",
     "webpack-cli": "^4.10.0"
   },
-  "version": "1.31.0",
+  "version": "1.32.0",
   "changelog": {
+    "1.32.0": "Minor touchups for the chat percentage line plot, commented out the unused radar UI for now. ~ Sean Parker",
     "1.31.0": "Refined the UI for the chatter and viewer line plots. ~ Sean Parker",
     "1.30.0": "Implemented a calculated % for active unique chatters among the total live viewer count. ~ Sean Parker",
     "1.29.0": "Finished implementing a new local service for bot tokens and verified the viewership request configuration. The UI now shows live view counts in a line plot. ~ Sean Parker",
