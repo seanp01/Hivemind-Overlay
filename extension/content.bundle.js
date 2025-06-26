@@ -21533,9 +21533,9 @@ function drawViewershipLinePlot() {
   ctx.beginPath();
   points.forEach((p, i) => {
     // Use both left and right padding of 100px
-    const x = leftPad + (p.ts - windowStart) / (selectedTimeFrame * 1000) * (w - 100);
+    const x = leftPad + 100 + (p.ts - windowStart) / (selectedTimeFrame * 1000) * (w - 200);
     const y = topPad + h - (p.count - min) / (max - min) * h;
-    if (x < leftPad) return; // Skip points that are off the left edge
+    if (x < 100) return; // Skip points that are off the left edge
     if (i === 0) ctx.moveTo(x, y);else ctx.lineTo(x, y);
   });
   ctx.strokeStyle = '#2196F3';
@@ -21569,11 +21569,11 @@ function drawViewershipLinePlot() {
   }
   ctx.beginPath();
   percentPoints.forEach((p, i) => {
-    const x = leftPad + (p.ts - windowStart) / (selectedTimeFrame * 1000) * (w - 100);
+    const x = leftPad + 100 + (p.ts - windowStart) / (selectedTimeFrame * 1000) * (w - 200);
     // Clamp percent to min/max for safety
     const percent = Math.max(percentMin, Math.min(percentMax, p.percent));
     const y = topPad + h - (percent - percentMin) / (percentMax - percentMin) * h;
-    if (x < leftPad) return; // Skip points that are off the left edge
+    if (x < 100) return; // Skip points that are off the left edge
     if (i === 0) ctx.moveTo(x, y);else ctx.lineTo(x, y);
   });
   ctx.strokeStyle = '#43A047';
@@ -21604,7 +21604,7 @@ function drawViewershipLinePlot() {
   const last = points[points.length - 1];
   const lastPercent = percentPoints[percentPoints.length - 1];
   if (last) {
-    let x = leftPad + (last.ts - windowStart) / (selectedTimeFrame * 1000) * w - 100;
+    let x = leftPad + 100 + (last.ts - windowStart) / (selectedTimeFrame * 1000) * w - 200;
     const y = topPad + h - (last.count - min) / (max - min) * h;
     ctx.fillStyle = '#2196F3';
     ctx.beginPath();
