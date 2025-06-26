@@ -23,6 +23,11 @@
 - 🔄 Toggleable filter modes  
 - 📊 Overlay-compatible output  
 
+![image](https://github.com/user-attachments/assets/dcd35c34-631a-4427-9033-35f1f872e8d7)
+
+
+![image](https://github.com/user-attachments/assets/3fdc5cd6-265a-4e42-afd4-20406f6f02d6)
+
 ---
 
 ## 🧱 Tech Stack
