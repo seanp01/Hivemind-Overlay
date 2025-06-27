@@ -31,8 +31,9 @@
     "webpack": "^5.99.9",
     "webpack-cli": "^4.10.0"
   },
-  "version": "1.39.0",
+  "version": "1.40.0",
   "changelog": {
+    "1.40.0": "UI bug fix for the line plot left side margin. ~ Sean Parker",
     "1.39.0": "Fixed padding for the line plots in the UI. ~ Sean Parker",
     "1.38.0": "Implemented a UI filter for the message embed container. ~ Sean Parker",
     "1.37.0": "Minor adjustments in the UI for grid margins. ~ Sean Parker",

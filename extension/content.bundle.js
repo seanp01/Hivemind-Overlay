@@ -20127,7 +20127,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     console.log("Tab URL received in content script:", request.url);
     // You can now use request.url in your content script logic
     chatClient.connect(request.url);
-    twitchClient.startViewerCountPolling(request.url, addViewershipPoint, 10000); // 10 seconds is the shortest time interval for the UI
+    twitchClient.startViewerCountPolling(request.url, addViewershipPoint, 5000); // 10 seconds is the shortest time interval for the UI
   }
   if (request.type === "getOverlayHtml") {
     const overlay = document.getElementById('hivemind-overlay');
@@ -21430,7 +21430,7 @@ function addViewershipPoint(count, ts, err) {
   }
   drawViewershipLinePlot();
 }
-
+let first = true;
 /**
  * Draws the viewership line plot on the canvas.
  * Also overlays a second line plot: % of unique chatters among viewers.
@@ -21443,9 +21443,9 @@ function drawViewershipLinePlot() {
   ctx.clearRect(0, 0, viewershipCanvas.width, viewershipCanvas.height);
 
   // Use only padding, no translate
-  const leftPad = 8,
-    rightPad = 8,
-    topPad = 8,
+  const leftPad = 120,
+    rightPad = 100,
+    topPad = 16,
     bottomPad = 16;
   const w = viewershipCanvas.width - leftPad - rightPad;
   const h = viewershipCanvas.height - topPad - bottomPad;
@@ -21453,8 +21453,25 @@ function drawViewershipLinePlot() {
 
   // Determine the time window to plot (match selectedTimeFrame)
   const now = Date.now();
-  const windowStart = now - selectedTimeFrame * 1000;
-  const points = viewershipBuffer.filter(p => p.ts >= windowStart);
+  // Use the earliest and latest timestamps in the viewershipBuffer for accurate windowing
+  const bufferStart = viewershipBuffer.length ? viewershipBuffer[0].ts : now - selectedTimeFrame * 1000;
+  const bufferEnd = viewershipBuffer.length ? viewershipBuffer[viewershipBuffer.length - 1].ts : now;
+  const windowEnd = bufferEnd;
+  const windowStart = windowEnd - selectedTimeFrame * 1000;
+
+  // Include a few points earlier than windowStart for better line continuity
+  const PRE_WINDOW_POINTS = 1;
+  let points = viewershipBuffer.filter(p => p.ts >= windowStart && p.ts <= windowEnd);
+  if (viewershipBuffer.length && points.length > 0) {
+    // Find the index of the first point in the window
+    const firstIdx = viewershipBuffer.findIndex(p => p.ts === points[0].ts);
+    // Add up to PRE_WINDOW_POINTS before the window
+    const prePoints = [];
+    for (let i = Math.max(0, firstIdx - PRE_WINDOW_POINTS); i < firstIdx; i++) {
+      prePoints.push(viewershipBuffer[i]);
+    }
+    points = prePoints.concat(points);
+  }
 
   // Compute percent points for each viewership point
   const CHATTER_WINDOW_MS = 60 * 1000; // 60s window for unique chatters per point
@@ -21488,7 +21505,7 @@ function drawViewershipLinePlot() {
       const percent = Math.round(windowUniqueChatters.size / p.count * 100);
       ctx.fillStyle = '#43A047';
       ctx.font = 'bold 12px Arial';
-      ctx.fillText(`${percent}% chatting`, x - 16, y + 22);
+      ctx.fillText(`${percent}% (${windowUniqueChatters.size}) chatting`, x - 16, y + 22);
     }
     ctx.restore();
     return;
@@ -21532,11 +21549,14 @@ function drawViewershipLinePlot() {
   // Draw viewership line
   ctx.beginPath();
   points.forEach((p, i) => {
-    // Use both left and right padding of 100px
-    const x = leftPad + 100 + (p.ts - windowStart) / (selectedTimeFrame * 1000) * (w - 200);
+    // Use both left and right padding of 100p
+    const x = leftPad + (p.ts - windowStart) / (windowEnd - windowStart) * w;
     const y = topPad + h - (p.count - min) / (max - min) * h;
-    if (x < 100) return; // Skip points that are off the left edge
-    if (i === 0) ctx.moveTo(x, y);else ctx.lineTo(x, y);
+    if (i === 0) {
+      ctx.moveTo(x, y);
+    } else {
+      ctx.lineTo(x, y);
+    }
   });
   ctx.strokeStyle = '#2196F3';
   ctx.lineWidth = 2;
@@ -21569,12 +21589,15 @@ function drawViewershipLinePlot() {
   }
   ctx.beginPath();
   percentPoints.forEach((p, i) => {
-    const x = leftPad + 100 + (p.ts - windowStart) / (selectedTimeFrame * 1000) * (w - 200);
+    const x = leftPad + (p.ts - windowStart) / (windowEnd - windowStart) * w;
     // Clamp percent to min/max for safety
     const percent = Math.max(percentMin, Math.min(percentMax, p.percent));
     const y = topPad + h - (percent - percentMin) / (percentMax - percentMin) * h;
-    if (x < 100) return; // Skip points that are off the left edge
-    if (i === 0) ctx.moveTo(x, y);else ctx.lineTo(x, y);
+    if (i === 0) {
+      ctx.moveTo(x, y);
+    } else {
+      ctx.lineTo(x, y);
+    }
   });
   ctx.strokeStyle = '#43A047';
   ctx.lineWidth = 2;
@@ -21587,24 +21610,24 @@ function drawViewershipLinePlot() {
   ctx.font = '14px Arial';
   ctx.textAlign = 'right';
   ctx.textBaseline = 'top';
-  ctx.fillText(max, leftPad + 40, topPad - 2);
+  ctx.fillText(max, 60, topPad - 2);
   ctx.textBaseline = 'bottom';
-  ctx.fillText(min, leftPad + 40, topPad + h);
+  ctx.fillText(min, 60, topPad + h);
 
   // Draw min/max labels for percent (right side)
   ctx.fillStyle = '#43A047';
   ctx.font = '12px Arial';
   ctx.textAlign = 'left';
   ctx.textBaseline = 'top';
-  ctx.fillText(percentMax + '%', viewershipCanvas.width - rightPad - 40, topPad - 2);
+  ctx.fillText(percentMax + '%', viewershipCanvas.width - rightPad + 40, topPad - 2);
   ctx.textBaseline = 'bottom';
-  ctx.fillText(percentMin + '%', viewershipCanvas.width - rightPad - 40, topPad + h);
+  ctx.fillText(percentMin + '%', viewershipCanvas.width - rightPad + 40, topPad + h);
 
   // Draw latest value at the end
   const last = points[points.length - 1];
   const lastPercent = percentPoints[percentPoints.length - 1];
   if (last) {
-    let x = leftPad + 100 + (last.ts - windowStart) / (selectedTimeFrame * 1000) * w - 200;
+    let x = leftPad + (last.ts - windowStart) / (windowEnd - windowStart) * w;
     const y = topPad + h - (last.count - min) / (max - min) * h;
     ctx.fillStyle = '#2196F3';
     ctx.beginPath();
@@ -21615,10 +21638,11 @@ function drawViewershipLinePlot() {
 
     // Calculate label widths
     const viewerLabel = `${last.count} viewers`;
-    const percentLabel = lastPercent && lastPercent.count > 0 ? `${Math.round(lastPercent.percent)}% chatting` : '';
+    const percentLabel = lastPercent && lastPercent.count > 0 ? `${Math.round(lastPercent.percent)}% (${windowUniqueChatters.size}) chatting` : '';
     const viewerLabelWidth = ctx.measureText(viewerLabel).width;
     const percentLabelWidth = ctx.measureText(percentLabel).width;
     const maxLabelWidth = Math.max(viewerLabelWidth, percentLabelWidth);
+    let arcX = x;
 
     // Prevent label overflow on the right edge
     const labelPadding = 8 + maxLabelWidth + 8;
@@ -21648,7 +21672,7 @@ function drawViewershipLinePlot() {
       ctx.fillText(percentLabel, x - 24, percentLabelY);
       // Draw percent dot
       ctx.beginPath();
-      ctx.arc(x, yPercent, 3, 0, 2 * Math.PI);
+      ctx.arc(arcX, yPercent, 3, 0, 2 * Math.PI);
       ctx.fill();
     } else {
       // Place each label near its point, above unless near min, below if near max
@@ -21674,7 +21698,7 @@ function drawViewershipLinePlot() {
         ctx.fillStyle = '#43A047';
         // Draw percent dot
         ctx.beginPath();
-        ctx.arc(x, yPercent, 3, 0, 2 * Math.PI);
+        ctx.arc(arcX, yPercent, 3, 0, 2 * Math.PI);
         ctx.fill();
         // Place label above or below depending on space
         let percentLabelBaseline, percentLabelOffset;
