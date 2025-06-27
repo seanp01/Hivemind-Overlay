@@ -2378,6 +2378,9 @@ function drawViewershipLinePlot() {
     const bufferStart = viewershipBuffer.length ? viewershipBuffer[0].ts : now - selectedTimeFrame * 1000;
     const bufferEnd = viewershipBuffer.length ? viewershipBuffer[viewershipBuffer.length - 1].ts : now;
     const windowEnd = bufferEnd;
+    // Calculate windowStart so that the selectedTimeFrame always fills the entire plot width,
+    // regardless of the total buffer duration.
+    // The right edge is always "now" (windowEnd), left edge is windowEnd - selectedTimeFrame.
     const windowStart = windowEnd - selectedTimeFrame * 1000;
 
     // Include a few points earlier than windowStart for better line continuity
