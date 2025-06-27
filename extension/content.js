@@ -219,7 +219,7 @@ messagesContainer.style.minWidth = '0';
 messagesContainer.style.minHeight = '300px';
 messagesContainer.style.width = '100%';
 messagesContainer.style.margin = '10px';
-messagesContainer.style.padding = '10px';
+messagesContainer.style.padding = '100px 10px 10px 10px';
 
 const timeFrames = [
     { label: '10s', value: 10 },
@@ -460,6 +460,135 @@ overlayRowContainer.style.display = 'flex';
 overlayRowContainer.style.flexDirection = 'row';
 overlayRowContainer.style.width = '100%';
 overlayRowContainer.style.alignItems = 'flex-start';
+
+/**
+ * --- Sentiment Filter Bar for Messages ---
+ * Allows filtering messages by sentiment with 5 states per sentiment.
+ */
+
+// Track filter state for each sentiment (0=neutral, 1=show any, 2=show top, 3=hide any, 4=hide top)
+const sentimentFilterStates = {};
+const SENTIMENT_FILTER_STATES = 5;
+
+// Helper: get next state (0→1→2→3→4→0)
+function nextSentimentFilterState(sentiment) {
+    sentimentFilterStates[sentiment] = ((sentimentFilterStates[sentiment] || 0) + 1) % SENTIMENT_FILTER_STATES;
+    updateMessageFilterBarUI();
+    updateFilteredMessages();
+}
+
+// Create the filter bar
+const messageFilterBar = document.createElement('div');
+messageFilterBar.style.position = 'fixed';
+messageFilterBar.style.top = '0';
+messageFilterBar.style.left = '0';
+messageFilterBar.style.zIndex = '100';
+messageFilterBar.style.background = 'rgba(43,43,43,0.97)';
+messageFilterBar.style.display = 'none';
+messageFilterBar.style.gap = '8px';
+messageFilterBar.style.alignItems = 'center';
+messageFilterBar.style.padding = '6px 10px 6px 10px';
+messageFilterBar.style.borderBottom = '1px solid #2226';
+messageFilterBar.style.borderTopLeftRadius = '8px';
+messageFilterBar.style.borderTopRightRadius = '8px';
+messageFilterBar.style.boxShadow = '0 2px 8px #0002';
+// Match the width of messagesContainer
+messageFilterBar.style.width = 'calc(100% - 20px)';
+// Allow horizontal scrolling if buttons overflow
+messageFilterBar.style.overflowX = 'auto';
+
+// List of all sentiments (sorted for consistency)
+const allSentiments = Object.keys(sentimentEmojis).filter(s => s !== 'default').sort();
+
+// Create a button for each sentiment
+allSentiments.forEach(sentiment => {
+    const btn = document.createElement('button');
+    btn.textContent = sentimentEmojis[sentiment] + ' ' + sentiment;
+    btn.style.background = '#222';
+    btn.style.color = '#fff';
+    btn.style.border = 'none';
+    btn.style.borderRadius = '6px';
+    btn.style.padding = '4px 10px';
+    btn.style.fontSize = '13px';
+    btn.style.cursor = 'pointer';
+    btn.style.opacity = '1';
+    btn.style.transition = 'background 0.2s, opacity 0.2s';
+    btn.dataset.sentiment = sentiment;
+    btn.classList.add('message-filter-btn');
+    btn.addEventListener('click', () => nextSentimentFilterState(sentiment));
+    messageFilterBar.appendChild(btn);
+});
+
+// Insert filter bar at the top of the messages container
+messagesContainer.parentNode.insertBefore(messageFilterBar, messagesContainer);
+
+// Update button UI to reflect state
+function updateMessageFilterBarUI() {
+    messageFilterBar.querySelectorAll('.message-filter-btn').forEach(btn => {
+        const sentiment = btn.dataset.sentiment;
+        const state = sentimentFilterStates[sentiment] || 0;
+        btn.style.opacity = state === 0 ? '1' : '0.7';
+        btn.style.background = state === 0 ? '#222' :
+            state === 1 ? '#43A047' :
+            state === 2 ? '#1976D2' :
+            state === 3 ? '#E53935' :
+            state === 4 ? '#FDD835' : '#222';
+        btn.title =
+            state === 0 ? 'Show all messages' :
+            state === 1 ? 'Show messages with this sentiment (any)' :
+            state === 2 ? 'Show messages where this is top sentiment' :
+            state === 3 ? 'Hide messages with this sentiment (any)' :
+            state === 4 ? 'Hide messages where this is top sentiment' : '';
+    });
+}
+
+// Helper: get active filter states (returns object: sentiment -> state)
+function getActiveSentimentFilters() {
+    return Object.fromEntries(
+        Object.entries(sentimentFilterStates).filter(([k, v]) => v && v > 0)
+    );
+}
+
+// Main filter logic for messages
+function updateFilteredMessages() {
+    // If all filters are neutral, show all messages
+    const filters = getActiveSentimentFilters();
+    if (Object.keys(filters).length === 0) {
+        messagesContainer.innerHTML = '';
+        windowMessages.forEach(msg => {
+            const el = renderMessageElement(msg);
+            messagesContainer.appendChild(el);
+        });
+        return;
+    }
+    // Otherwise, filter messages according to all active filters (AND logic)
+    messagesContainer.innerHTML = '';
+    windowMessages.forEach(msg => {
+        let show = true;
+        for (const [sentiment, state] of Object.entries(filters)) {
+            const hasSentiment = Array.isArray(msg.predictions) && msg.predictions.some(p => p.sentiment === sentiment);
+            const topSentiment = Array.isArray(msg.predictions) && msg.predictions.length > 0 && msg.predictions[0].sentiment === sentiment;
+            if (state === 1) { // show any
+                if (!hasSentiment) show = false;
+            } else if (state === 2) { // show top
+                if (!topSentiment) show = false;
+            } else if (state === 3) { // hide any
+                if (hasSentiment) show = false;
+            } else if (state === 4) { // hide top
+                if (topSentiment) show = false;
+            }
+            if (!show) break;
+        }
+        if (show) {
+            const el = renderMessageElement(msg);
+            messagesContainer.appendChild(el);
+        }
+    });
+}
+
+// Initial UI update
+updateMessageFilterBarUI();
+
 /**
  * --- Media Embed Filter Bar ---
  * This bar floats at the top of the mediaEmbedColumnContainer and allows filtering by embed type.
@@ -503,10 +632,9 @@ const embedFilterBar = document.createElement('div');
 embedFilterBar.style.position = 'sticky';
 embedFilterBar.style.top = '0';
 embedFilterBar.style.left = '0';
-embedFilterBar.style.right = '0';
 embedFilterBar.style.zIndex = '100';
 embedFilterBar.style.background = 'rgba(43,43,43,0.97)';
-embedFilterBar.style.display = 'flex';
+embedFilterBar.style.display = 'none';
 embedFilterBar.style.gap = '8px';
 embedFilterBar.style.alignItems = 'center';
 embedFilterBar.style.padding = '6px 10px 6px 10px';
@@ -1155,7 +1283,6 @@ function updateEmbedsForWindow() {
     if (mediaEmbedColumnContainer.firstChild !== embedFilterBar) {
         mediaEmbedColumnContainer.insertBefore(embedFilterBar, mediaEmbedColumnContainer.firstChild);
     }
-    embedFilterBar.style.position = 'sticky';
     // Make embedFilterBar sticky to the window, not just the container
     embedFilterBar.style.position = 'fixed';
     embedFilterBar.style.top = (buttonBar.getBoundingClientRect().bottom + 10) + 'px';
@@ -1165,20 +1292,45 @@ function updateEmbedsForWindow() {
     embedFilterBar.style.zIndex = '10010';
     embedFilterBar.style.background = 'rgba(43,43,43,0.97)';
     embedFilterBar.style.boxShadow = '0 2px 8px #0002';
-
-    // Keep the filter bar in sync with window scroll/resize
-    function updateEmbedFilterBarPosition() {
-        const rect = mediaEmbedColumnContainer.getBoundingClientRect();
-        embedFilterBar.style.left = rect.left + 'px';
-        embedFilterBar.style.width = rect.width + 'px';
-        embedFilterBar.style.top = (buttonBar.getBoundingClientRect().bottom + 10) + 'px';
+    embedFilterBar.style.display = 'flex';
+    // --- Sticky/floating messageFilterBar logic ---
+    // Ensure messageFilterBar is always above messagesContainer and styled to float above messages
+    if (messagesContainer.parentNode && messagesContainer.parentNode.firstChild !== messageFilterBar) {
+        messagesContainer.parentNode.insertBefore(messageFilterBar, messagesContainer);
     }
-    window.addEventListener('scroll', updateEmbedFilterBarPosition, { passive: true });
-    window.addEventListener('resize', updateEmbedFilterBarPosition);
-    updateEmbedFilterBarPosition();
+    messageFilterBar.style.position = 'fixed';
+    messageFilterBar.style.top = (buttonBar.getBoundingClientRect().bottom + 10) + 'px';
+    messageFilterBar.style.left = messagesContainer.getBoundingClientRect().left + 'px';
+    messageFilterBar.style.maxWidth = (parseInt(messagesContainer.offsetWidth, 10) - 20) + 'px';
+    messageFilterBar.style.overflowX = 'auto';
+    messageFilterBar.style.zIndex = '10010';
+    messageFilterBar.style.background = 'rgba(43,43,43,0.97)';
+    messageFilterBar.style.boxShadow = '0 2px 8px #0002';
+    messageFilterBar.style.display = 'flex';
+
+    // Keep the filter bars in sync with window scroll/resize
+    function updateFilterBarPositions() {
+        // Embed filter bar
+        const embedRect = mediaEmbedColumnContainer.getBoundingClientRect();
+        embedFilterBar.style.left = embedRect.left + 'px';
+        embedFilterBar.style.width = embedRect.width + 'px';
+        embedFilterBar.style.top = (buttonBar.getBoundingClientRect().bottom + 10) + 'px';
+
+        // Message filter bar
+        const msgRect = messagesContainer.getBoundingClientRect();
+        messageFilterBar.style.left = msgRect.left + 'px';
+        messageFilterBar.style.width = msgRect.width + 'px';
+        messageFilterBar.style.top = (buttonBar.getBoundingClientRect().bottom + 10) + 'px';
+    }
+    window.addEventListener('scroll', updateFilterBarPositions, { passive: true });
+    window.addEventListener('resize', updateFilterBarPositions);
+    updateFilterBarPositions();
     embedFilterBar.style.zIndex = '10010';
     embedFilterBar.style.background = 'rgba(43,43,43,0.97)';
     embedFilterBar.style.boxShadow = '0 2px 8px #0002';
+    messageFilterBar.style.zIndex = '10010';
+    messageFilterBar.style.background = 'rgba(43,43,43,0.97)';
+    messageFilterBar.style.boxShadow = '0 2px 8px #0002';
 
     // Prevent overlap with buttonBar by adjusting top offset dynamically
     // (If overlayContainer is scrolled, sticky will keep it visible at the right spot)
@@ -2317,6 +2469,7 @@ const origUpdatePieChartForWindow = updatePieChartForWindow;
 updatePieChartForWindow = function() {
     origUpdatePieChartForWindow.apply(this, arguments);
     updateWindowUniqueChatters();
+    updateFilteredMessages();
 };
 
 /**
