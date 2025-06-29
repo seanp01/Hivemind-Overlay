@@ -19306,7 +19306,7 @@ expandButton.style.textAlign = 'center';
 let messagesContainer = document.createElement('div');
 messagesContainer.id = 'hivemind-messages';
 // Remove fixed height to allow flexbox to control sizing
-messagesContainer.style.overflowY = 'auto';
+messagesContainer.style.overflowY = 'hidden';
 messagesContainer.style.position = 'static';
 messagesContainer.style.display = 'flex';
 messagesContainer.style.background = 'rgba(30,30,30,0.85)';
@@ -19978,7 +19978,7 @@ viewershipRowContainer.appendChild(viewershipCanvas);
 
 // --- Viewership Data Buffer and Plotting ---
 const viewershipBuffer = [];
-const MAX_VIEWERSHIP_POINTS = 200; // Keep last 200 points
+const MAX_VIEWERSHIP_POINTS = 1000; // Keep last 200 points
 
 // Redraw when time frame changes
 timeFrameRadios.querySelectorAll('input[type=radio]').forEach(radio => {

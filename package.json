@@ -31,8 +31,9 @@
     "webpack": "^5.99.9",
     "webpack-cli": "^4.10.0"
   },
-  "version": "1.42.0",
+  "version": "1.43.0",
   "changelog": {
+    "1.43.0": "Updated the viewership line plot cap to match the 24 hour time interval. ~ Sean Parker",
     "1.42.0": "Implemented a message sentiment filter that offers 5 states of inclusion for each sentiment label. ~ Sean Parker",
     "1.41.0": "Scaling fix for the larger plot line window intervals. ~ Sean Parker",
     "1.40.0": "UI bug fix for the line plot left side margin. ~ Sean Parker",

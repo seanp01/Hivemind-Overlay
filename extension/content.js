@@ -207,7 +207,7 @@ expandButton.style.textAlign = 'center';
 let messagesContainer = document.createElement('div');
 messagesContainer.id = 'hivemind-messages';
 // Remove fixed height to allow flexbox to control sizing
-messagesContainer.style.overflowY = 'auto';
+messagesContainer.style.overflowY = 'hidden';
 messagesContainer.style.position = 'static';
 messagesContainer.style.display = 'flex';
 messagesContainer.style.background = 'rgba(30,30,30,0.85)';
@@ -849,7 +849,7 @@ viewershipRowContainer.appendChild(viewershipCanvas);
 
 // --- Viewership Data Buffer and Plotting ---
 const viewershipBuffer = [];
-const MAX_VIEWERSHIP_POINTS = 200; // Keep last 200 points
+const MAX_VIEWERSHIP_POINTS = (24 * 60 * 60) / 5; //max interval [(24 hours) x 60 minutes x 60 seconds] / 5 seconds (polling rate)
 
 // Redraw when time frame changes
 timeFrameRadios.querySelectorAll('input[type=radio]').forEach(radio => {
@@ -2519,7 +2519,7 @@ function drawViewershipLinePlot() {
     ctx.clearRect(0, 0, viewershipCanvas.width, viewershipCanvas.height);
 
     // Use only padding, no translate
-    const leftPad = 120, rightPad = 100, topPad = 16, bottomPad = 16;
+    const leftPad = 100, rightPad = 100, topPad = 16, bottomPad = 16;
     const w = viewershipCanvas.width - leftPad - rightPad;
     const h = viewershipCanvas.height - topPad - bottomPad;
 
@@ -2633,6 +2633,7 @@ function drawViewershipLinePlot() {
         // Use both left and right padding of 100p
         const x = leftPad + (((p.ts - windowStart) / (windowEnd - windowStart)) * w);
         const y = topPad + h - ((p.count - min) / (max - min)) * h;
+        if (x < leftPad) return;
         if (i === 0) {
             ctx.moveTo(x, y);
         } else {
@@ -2674,6 +2675,7 @@ function drawViewershipLinePlot() {
         // Clamp percent to min/max for safety
         const percent = Math.max(percentMin, Math.min(percentMax, p.percent));
         const y = topPad + h - ((percent - percentMin) / (percentMax - percentMin)) * h;
+        if (x < leftPad) return;
         if (i === 0) {
             ctx.moveTo(x, y);
         } else {
